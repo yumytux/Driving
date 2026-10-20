@@ -1,0 +1,773 @@
+<title>L-Plan Lesson Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Barlow+Semi+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: one narrow column like a phone app — sticky bar, stacked sections, actions at thumb height. */
+:root {
+  --bg: #eef1f3;
+  --surface: #ffffff;
+  --ink: #1b2128;
+  --muted: #5b6670;
+  --line: #d4dbe1;
+  --accent: #c8231b;      /* L-plate red */
+  --accent-ink: #ffffff;
+  --blue: #1f5a8f;        /* motorway sign blue, for progress */
+  --blue-soft: #dbe7f2;
+  --good: #1d7a46;
+  --warn: #9a6400;
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #1a2128; --ink: #e5eaef; --muted: #97a3ae; --line: #2c353e;
+    --accent: #ff5b50; --accent-ink: #1a0503; --blue: #74aee3; --blue-soft: #1f3346;
+    --good: #5cc98b; --warn: #e3b04b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #1a2128; --ink: #e5eaef; --muted: #97a3ae; --line: #2c353e;
+  --accent: #ff5b50; --accent-ink: #1a0503; --blue: #74aee3; --blue-soft: #1f3346;
+  --good: #5cc98b; --warn: #e3b04b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.15; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.1rem; }
+p { margin: 0; }
+.wrap { max-width: 640px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar .wrap { display: flex; align-items: center; gap: 12px; min-height: 56px; padding-block: 8px; }
+.bar h1 { font-size: 1.35rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lplate { width: 30px; height: 30px; flex: none; border-radius: 5px; background: #fff; border: 2px solid #c8231b; display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; color: #c8231b; font-size: 22px; line-height: 1; }
+.iconbtn { border: 0; background: transparent; padding: 8px; margin: -8px; border-radius: 8px; cursor: pointer; display: grid; place-items: center; color: var(--ink); }
+.iconbtn svg { width: 24px; height: 24px; }
+
+main.wrap { display: flex; flex-direction: column; gap: 20px; padding-block: 18px 48px; }
+.section { display: flex; flex-direction: column; gap: 10px; }
+.label { font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88rem; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.notice { border-radius: 10px; padding: 12px 14px; background: var(--blue-soft); color: var(--ink); font-size: 0.92rem; }
+.notice.error { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+
+.btn { appearance: none; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 12px 16px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; text-align: center; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn svg { width: 20px; height: 20px; flex: none; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > .btn { flex: 1 1 140px; }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+
+/* pupil list */
+.pupils { display: flex; flex-direction: column; gap: 10px; }
+.pcard { text-align: left; width: 100%; cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
+.pcard .name { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; }
+.pcard .meta { grid-column: 1 / -1; color: var(--muted); font-size: 0.88rem; display: flex; gap: 6px 14px; flex-wrap: wrap; }
+.pcard .pct { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--blue); align-self: center; }
+.meter { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--blue-soft); overflow: hidden; }
+.meter > i { display: block; height: 100%; background: var(--blue); }
+.chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 10px; font-size: 0.8rem; font-weight: 700; background: var(--blue-soft); color: var(--ink); }
+.chip.soon { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+.empty { text-align: center; padding: 28px 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.empty .lplate { width: 56px; height: 56px; font-size: 42px; border-width: 3px; border-radius: 8px; }
+
+/* pupil detail */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.stat b { display: block; font-family: var(--font-display); font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 0.78rem; color: var(--muted); }
+ul.plain { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.timeline { display: flex; flex-direction: column; border-left: 3px solid var(--blue-soft); margin-left: 4px; }
+.step { display: grid; grid-template-columns: 58px 1fr; gap: 10px; padding: 6px 0 6px 12px; }
+.step .mins { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--blue); }
+.step .what { font-weight: 700; }
+
+.skills { display: flex; flex-direction: column; gap: 2px; }
+.skill { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.skill:last-child { border-bottom: 0; }
+.skill .lvl { grid-column: 1 / -1; font-size: 0.8rem; color: var(--muted); margin-top: -4px; }
+.segs { display: flex; gap: 3px; }
+.seg { width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; padding: 0; font-size: 0.72rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.seg.on { background: var(--blue); border-color: var(--blue); color: var(--surface); }
+.seg.five.on { background: var(--good); border-color: var(--good); }
+.legend { font-size: 0.8rem; color: var(--muted); }
+
+details.lesson { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+details.lesson summary { list-style: none; cursor: pointer; padding: 12px 16px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
+details.lesson summary::-webkit-details-marker { display: none; }
+details.lesson summary .d { font-weight: 700; }
+details.lesson summary .s { grid-column: 1 / -1; color: var(--muted); font-size: 0.9rem; }
+details.lesson .body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+/* forms */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-weight: 700; font-size: 0.95rem; }
+.field .hint { font-size: 0.85rem; color: var(--muted); }
+input[type=text], input[type=date], input[type=number], select, textarea { width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 11px 12px; min-height: 48px; }
+textarea { resize: vertical; min-height: 120px; line-height: 1.45; }
+textarea.big { min-height: 210px; font-size: 1.05rem; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.check { display: flex; gap: 10px; align-items: center; font-weight: 700; }
+.check input { width: 22px; height: 22px; accent-color: var(--blue); }
+.dictate { display: flex; gap: 10px; align-items: flex-start; font-size: 0.9rem; color: var(--muted); }
+.dictate svg { width: 20px; height: 20px; flex: none; color: var(--accent); margin-top: 1px; }
+.shots { display: flex; gap: 8px; flex-wrap: wrap; }
+.shot { position: relative; width: 84px; height: 120px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.shot img { width: 100%; height: 100%; object-fit: cover; }
+.shot button { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(0,0,0,.65); color: #fff; cursor: pointer; font-weight: 700; line-height: 1; }
+.filebtn { position: relative; overflow: hidden; }
+.filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.update { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: start; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.update:last-child { border-bottom: 0; }
+.update input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--blue); }
+.update .why { grid-column: 2; font-size: 0.88rem; color: var(--muted); }
+.thinking { display: flex; align-items: center; gap: 12px; }
+.spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--blue-soft); border-top-color: var(--blue); animation: spin 0.9s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-weight: 700; z-index: 20; max-width: calc(100% - 32px); }
+.copyfall { width: 100%; min-height: 160px; font-size: 0.85rem; }
+@media (max-width: 380px) { .two { grid-template-columns: 1fr; } .seg { width: 22px; } }
+</style>
+
+<div id="app"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+const SKILLS = [
+  ["cockpit", "Cockpit drill & controls"],
+  ["moveoff", "Moving off & stopping"],
+  ["mirrors", "Use of mirrors"],
+  ["signals", "Signals"],
+  ["turning", "Junctions: turning"],
+  ["emerging", "Junctions: emerging"],
+  ["crossroads", "Crossroads"],
+  ["roundabouts", "Roundabouts"],
+  ["crossings", "Pedestrian crossings"],
+  ["meeting", "Meeting traffic & clearance"],
+  ["position", "Road position & lanes"],
+  ["progress", "Speed & progress"],
+  ["hills", "Hill starts"],
+  ["planning", "Hazard awareness & planning"],
+  ["dual", "Dual carriageways"],
+  ["rural", "Country roads"],
+  ["overtaking", "Overtaking"],
+  ["emergency", "Emergency stop"],
+  ["parallel", "Parallel park"],
+  ["bay", "Bay park"],
+  ["pullright", "Pull up on the right"],
+  ["independent", "Independent driving"],
+];
+const SKILL_NAME = Object.fromEntries(SKILLS);
+const LEVELS = ["Not covered", "Introduced", "Full instruction", "Prompted", "Seldom prompted", "Independent"];
+const DEFAULT_SETTINGS = { minutes: 90, area: "", style: "" };
+
+const ICON = {
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 17l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+};
+
+const S = {
+  db: null, sample: null, uid: null, base: null,
+  ready: false, store: "pending",          // pending | db | memory
+  canAI: false, imgLimits: null,
+  pupils: [], settings: { ...DEFAULT_SETTINGS },
+  memLessons: {},                           // used only when the store is unavailable
+  view: "list", pupilId: null, lessons: [], lessonsUnsub: null,
+  draft: null, shots: [], result: null, accepted: {}, aiError: "", ctl: null,
+  confirmDelete: false,
+};
+
+/* ---------- helpers ---------- */
+const $ = (sel) => document.querySelector(sel);
+const h = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const arr = (v) => (Array.isArray(v) ? v : []).map((x) => (typeof x === "string" ? x : x == null ? "" : x)).filter(Boolean);
+const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const fmtDate = (iso, opts = { day: "numeric", month: "short", year: "numeric" }) => { if (!iso) return ""; const d = new Date(iso + (iso.length === 10 ? "T12:00:00" : "")); return isNaN(d) ? "" : d.toLocaleDateString("en-GB", opts); };
+const daysUntil = (iso) => { if (!iso) return null; const t = new Date(iso + "T12:00:00"); const n = new Date(); n.setHours(12, 0, 0, 0); return Math.round((t - n) / 864e5); };
+const pupil = () => S.pupils.find((p) => p.id === S.pupilId);
+const progressPct = (p) => { const sk = p.skills || {}; const total = SKILLS.reduce((a, [k]) => a + (Number(sk[k]) || 0), 0); return Math.round((total / (SKILLS.length * 5)) * 100); };
+let toastTimer;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 2200); }
+function loadDraft(pid) { try { return JSON.parse(localStorage.getItem("lp-draft-" + pid) || "null"); } catch { return null; } }
+function saveDraft() { if (!S.draft) return; try { localStorage.setItem("lp-draft-" + S.draft.pupilId, JSON.stringify(S.draft)); } catch {} }
+function clearDraft(pid) { try { localStorage.removeItem("lp-draft-" + pid); } catch {} }
+
+/* ---------- storage ---------- */
+async function writePupil(p) {
+  const body = JSON.parse(JSON.stringify({ ...p, kind: "pupil" }));
+  if (S.store === "db") { await S.db.doc(S.base + "/" + p.id).set(body); return; }
+  const i = S.pupils.findIndex((x) => x.id === p.id);
+  if (i >= 0) S.pupils[i] = body; else S.pupils.push(body);
+}
+async function writeSettings(s) {
+  if (S.store === "db") await S.db.doc(S.base + "/settings").set({ kind: "settings", ...s });
+  S.settings = { ...DEFAULT_SETTINGS, ...s };
+}
+function lessonsCol(pid) { return S.db.doc(S.base + "/" + pid).collection("lessons"); }
+async function writeLesson(pid, lesson) {
+  if (S.store === "db") { await lessonsCol(pid).doc(lesson.id).set(JSON.parse(JSON.stringify(lesson))); return; }
+  (S.memLessons[pid] ||= []).unshift(lesson);
+}
+async function removePupil(pid) {
+  if (S.store === "db") {
+    const snap = await lessonsCol(pid).get();
+    for (const d of snap.docs) await lessonsCol(pid).doc(d.id).delete();
+    await S.db.doc(S.base + "/" + pid).delete();
+    return;
+  }
+  S.pupils = S.pupils.filter((p) => p.id !== pid); delete S.memLessons[pid];
+}
+function watchLessons(pid) {
+  if (S.lessonsUnsub) { S.lessonsUnsub(); S.lessonsUnsub = null; }
+  S.lessons = [];
+  if (S.store !== "db") { S.lessons = S.memLessons[pid] || []; return; }
+  S.lessonsUnsub = lessonsCol(pid).orderBy("createdAt", "desc").limit(50).onSnapshot(
+    (snap) => { S.lessons = snap.docs.map((d) => ({ id: d.id, ...d.data() })); if (S.view === "pupil" && S.pupilId === pid) render(); },
+    () => {}
+  );
+}
+
+/* ---------- navigation ---------- */
+function go(view, extra = {}) {
+  if (S.ctl) { S.ctl.abort(); S.ctl = null; }
+  if (!["pupil", "log", "thinking", "review", "editPupil"].includes(view) && S.lessonsUnsub) { S.lessonsUnsub(); S.lessonsUnsub = null; }
+  Object.assign(S, { view, confirmDelete: false }, extra);
+  render();
+  window.scrollTo(0, 0);
+}
+function openPupil(pid) { S.pupilId = pid; watchLessons(pid); go("pupil"); }
+function startLog() {
+  const p = pupil(); if (!p) return;
+  S.draft = loadDraft(p.id) || { pupilId: p.id, date: todayISO(), minutes: S.settings.minutes, nextMinutes: S.settings.minutes, notes: "" };
+  S.shots = []; S.result = null; S.aiError = "";
+  go("log");
+}
+
+/* ---------- views ---------- */
+function bar(title, { back = null, right = "" } = {}) {
+  return `<header class="bar"><div class="wrap">
+    ${back ? `<button class="iconbtn" data-act="${back}" aria-label="Back">${ICON.back}</button>` : `<div class="lplate" aria-hidden="true">L</div>`}
+    <h1>${h(title)}</h1>${right}</div></header>`;
+}
+
+function storeNotice() {
+  if (S.store === "memory") return `<div class="notice error">Pupils can't be saved here. Open this page in the Claude app or at claude.ai while signed in, and your pupils will be kept privately on your account.</div>`;
+  return "";
+}
+
+function viewList() {
+  const pupils = [...S.pupils].sort((a, b) => a.name.localeCompare(b.name));
+  let body;
+  if (!S.ready) body = `<div class="panel thinking"><div class="spinner"></div><p>Loading your pupils…</p></div>`;
+  else if (!pupils.length) body = `<div class="panel empty"><div class="lplate">L</div>
+      <h2>Add your first pupil</h2>
+      <p class="muted">After each lesson, speak your notes and attach a screenshot from TotalDrive. L-Plan writes the next lesson plan and keeps track of each pupil's skills.</p>
+      <button class="btn primary" data-act="addPupil">${ICON.plus} Add pupil</button></div>`;
+  else body = `<div class="pupils">${pupils.map((p) => {
+      const pct = progressPct(p); const d = daysUntil(p.testDate);
+      const test = p.testDate && d >= 0 ? `<span class="chip ${d <= 21 ? "soon" : ""}">Test ${d === 0 ? "today" : "in " + d + (d === 1 ? " day" : " days")}</span>` : "";
+      return `<button class="pcard" data-act="open" data-id="${h(p.id)}">
+        <span class="name">${h(p.name)}</span><span class="pct">${pct}%</span>
+        <span class="meter" aria-hidden="true"><i style="width:${pct}%"></i></span>
+        <span class="meta"><span>${p.lessonCount || 0} lesson${p.lessonCount === 1 ? "" : "s"} logged</span>${p.lastLessonDate ? `<span>Last: ${fmtDate(p.lastLessonDate, { day: "numeric", month: "short" })}</span>` : ""}${p.nextPlan ? `<span>Next lesson planned</span>` : ""}${test}</span>
+      </button>`; }).join("")}</div>
+      <button class="btn block" data-act="addPupil">${ICON.plus} Add pupil</button>`;
+  return bar("L-Plan", { right: `<button class="iconbtn" data-act="settings" aria-label="Settings">${ICON.gear}</button>` }) +
+    `<main class="wrap">${storeNotice()}${body}</main>`;
+}
+
+function planHTML(plan) {
+  if (!plan) return "";
+  const steps = Array.isArray(plan.plan) ? plan.plan : [];
+  return `
+    ${plan.title ? `<h3>${h(plan.title)}</h3>` : ""}
+    ${arr(plan.objectives).length ? `<div class="section"><span class="label">Goals to agree with the pupil</span><ul class="plain">${arr(plan.objectives).map((o) => `<li>${h(o)}</li>`).join("")}</ul></div>` : ""}
+    ${steps.length ? `<div class="section"><span class="label">Lesson outline</span><div class="timeline">${steps.map((s) => `<div class="step"><span class="mins">${h(s.minutes)} min</span><div><div class="what">${h(s.activity)}</div>${s.detail ? `<div class="small muted">${h(s.detail)}</div>` : ""}</div></div>`).join("")}</div></div>` : ""}
+    ${plan.routes ? `<div class="section"><span class="label">Route ideas</span><p>${h(plan.routes)}</p></div>` : ""}
+    ${plan.briefing ? `<div class="section"><span class="label">Briefing points</span><p>${h(plan.briefing)}</p></div>` : ""}
+    ${arr(plan.watchFor).length ? `<div class="section"><span class="label">Watch for</span><ul class="plain">${arr(plan.watchFor).map((o) => `<li>${h(o)}</li>`).join("")}</ul></div>` : ""}
+    ${plan.instructorNote ? `<div class="section"><span class="label">Your note</span><p>${h(plan.instructorNote)}</p></div>` : ""}`;
+}
+
+function skillsHTML(p, editable) {
+  const sk = p.skills || {};
+  return `<div class="skills">${SKILLS.map(([k, name]) => {
+    const lv = Number(sk[k]) || 0;
+    return `<div class="skill"><span>${h(name)}</span>
+      <span class="segs" role="group" aria-label="${h(name)} level">${[1, 2, 3, 4, 5].map((n) =>
+        `<button class="seg ${n <= lv ? "on" : ""} ${n === 5 ? "five" : ""}" ${editable ? `data-act="level" data-skill="${k}" data-n="${n}"` : "disabled"} aria-label="${LEVELS[n]}" aria-pressed="${n <= lv}">${n}</button>`).join("")}</span>
+      <span class="lvl">${LEVELS[lv]}</span></div>`; }).join("")}</div>`;
+}
+
+function viewPupil() {
+  const p = pupil(); if (!p) return viewList();
+  const d = daysUntil(p.testDate);
+  const lessons = S.lessons;
+  return bar(p.name, { back: "home", right: `<button class="iconbtn" data-act="editPupil" aria-label="Edit pupil">${ICON.edit}</button>` }) + `<main class="wrap">
+    ${storeNotice()}
+    <div class="stats">
+      <div class="stat"><b>${progressPct(p)}%</b><span>skills progress</span></div>
+      <div class="stat"><b>${p.lessonCount || 0}</b><span>lessons logged</span></div>
+      <div class="stat"><b>${p.testDate ? (d >= 0 ? d : "–") : "–"}</b><span>${p.testDate ? (d >= 0 ? "days to test" : "test date passed") : "no test booked"}</span></div>
+    </div>
+    <button class="btn primary block" data-act="log">${ICON.mic} Log today's lesson</button>
+    <section class="section">
+      <span class="label">Next lesson</span>
+      ${p.nextPlan ? `<div class="panel">${planHTML(p.nextPlan)}
+        <button class="btn" data-act="copyPlan">${ICON.copy} Copy plan for TotalDrive</button></div>`
+        : `<div class="panel"><p class="muted">No plan yet. Log a lesson and L-Plan will plan the next one.</p></div>`}
+    </section>
+    <section class="section">
+      <div class="row" style="align-items:baseline;justify-content:space-between"><span class="label">Skills</span><span class="legend">1 Introduced · 3 Prompted · 5 Independent</span></div>
+      <div class="panel">${skillsHTML(p, true)}</div>
+    </section>
+    <section class="section">
+      <span class="label">Lesson history</span>
+      ${lessons.length ? lessons.map((l) => `<details class="lesson">
+        <summary><span class="d">${fmtDate(l.date)}</span><span class="muted small">${h(l.minutes)} min</span><span class="s">${h(l.summary || l.notes || "")}</span></summary>
+        <div class="body">
+          ${arr(l.wentWell).length ? `<div class="section"><span class="label">Went well</span><ul class="plain">${arr(l.wentWell).map((x) => `<li>${h(x)}</li>`).join("")}</ul></div>` : ""}
+          ${arr(l.workOn).length ? `<div class="section"><span class="label">To work on</span><ul class="plain">${arr(l.workOn).map((x) => `<li>${h(x)}</li>`).join("")}</ul></div>` : ""}
+          <div class="section"><span class="label">Your notes</span><p class="small">${h(l.notes)}</p></div>
+          <button class="btn" data-act="copyLesson" data-id="${h(l.id)}">${ICON.copy} Copy lesson summary</button>
+        </div></details>`).join("") : `<p class="muted small">No lessons logged yet.</p>`}
+    </section>
+  </main>`;
+}
+
+function viewEditPupil() {
+  const p = S.view === "editPupil" ? pupil() : null;
+  const v = p || { name: "", testDate: "", theory: false, transmission: "Manual", about: "" };
+  return bar(p ? "Edit pupil" : "New pupil", { back: p ? "backPupil" : "home" }) + `<main class="wrap">
+    <form id="pupilForm" class="panel">
+      <div class="field"><label for="pName">Name</label><input id="pName" type="text" required autocomplete="off" value="${h(v.name)}"></div>
+      <div class="two">
+        <div class="field"><label for="pTest">Practical test date</label><input id="pTest" type="date" value="${h(v.testDate)}"></div>
+        <div class="field"><label for="pTrans">Car</label><select id="pTrans">${["Manual", "Automatic"].map((t) => `<option ${v.transmission === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+      </div>
+      <label class="check"><input id="pTheory" type="checkbox" ${v.theory ? "checked" : ""}> Theory test passed</label>
+      <div class="field"><label for="pAbout">About this pupil</label>
+        <span class="hint">Anything that helps planning: experience, confidence, how they like to learn, private practice.</span>
+        <textarea id="pAbout">${h(v.about)}</textarea></div>
+      <button class="btn primary block" type="submit">${p ? "Save changes" : "Add pupil"}</button>
+    </form>
+    ${p ? (S.confirmDelete
+      ? `<div class="panel"><p><b>Delete ${h(p.name)}?</b> This removes their skills and all logged lessons. It can't be undone.</p>
+          <div class="row"><button class="btn" data-act="cancelDelete">Keep pupil</button><button class="btn primary" data-act="doDelete">Delete pupil</button></div></div>`
+      : `<button class="btn block" data-act="askDelete">Delete pupil</button>`) : ""}
+  </main>`;
+}
+
+function viewSettings() {
+  const s = S.settings;
+  return bar("Settings", { back: "home" }) + `<main class="wrap">
+    <form id="settingsForm" class="panel">
+      <div class="field"><label for="sMins">Usual lesson length (minutes)</label><input id="sMins" type="number" min="30" max="240" step="15" value="${h(s.minutes)}"></div>
+      <div class="field"><label for="sArea">Where you teach</label>
+        <span class="hint">Town and test centre, so route ideas fit your area. For example: Chelmsford, test centre at Hanbury Road.</span>
+        <input id="sArea" type="text" value="${h(s.area)}"></div>
+      <div class="field"><label for="sStyle">How you like to teach</label>
+        <span class="hint">L-Plan follows this in every plan. For example: client-centred, lots of pull-over debriefs, start each lesson with a 5-minute recap.</span>
+        <textarea id="sStyle">${h(s.style)}</textarea></div>
+      <button class="btn primary block" type="submit">Save settings</button>
+    </form>
+    <p class="muted small">Your pupils are saved privately to your Claude account. Lesson plans use your own Claude usage.</p>
+  </main>`;
+}
+
+function viewLog() {
+  const p = pupil(); const dr = S.draft;
+  const imgs = S.imgLimits;
+  return bar(p.name + ": new lesson", { back: "backPupil" }) + `<main class="wrap">
+    <div class="panel">
+      <div class="two">
+        <div class="field"><label for="lDate">Date</label><input id="lDate" type="date" value="${h(dr.date)}"></div>
+        <div class="field"><label for="lMins">Length (min)</label><input id="lMins" type="number" min="15" max="300" step="15" value="${h(dr.minutes)}"></div>
+      </div>
+      <div class="field"><label for="lNotes">How did it go?</label>
+        <div class="dictate">${ICON.mic}<span>Tap the box, then tap the microphone on your iPhone keyboard and just talk. What went well, what needs work, anything to remember for next time.</span></div>
+        <textarea id="lNotes" class="big" placeholder="Good lesson. Roundabouts much better, she's planning her approach now. Still hesitant emerging at busy T-junctions, two late observations. Stalled twice on hill starts. Wants to try dual carriageways next time.">${h(dr.notes)}</textarea></div>
+    </div>
+    ${S.canAI && imgs ? `<div class="panel">
+      <div class="field"><label>TotalDrive screenshots <span class="muted small">(optional)</span></label>
+        <span class="hint">Screenshot the pupil's progress or lesson history in TotalDrive and add it here. L-Plan reads it alongside your notes.</span></div>
+      ${S.shots.length ? `<div class="shots">${S.shots.map((s, i) => `<div class="shot"><img src="${s.url}" alt="Screenshot ${i + 1}"><button type="button" data-act="rmShot" data-i="${i}" aria-label="Remove screenshot">×</button></div>`).join("")}</div>` : ""}
+      ${S.shots.length < imgs.maxCount ? `<label class="btn filebtn">${ICON.image} Add screenshot<input id="shotInput" type="file" accept="${h(imgs.mediaTypes.join(","))}" multiple></label>` : ""}
+    </div>` : ""}
+    <div class="panel">
+      <div class="field"><label for="lNext">Next lesson length (min)</label><input id="lNext" type="number" min="15" max="300" step="15" value="${h(dr.nextMinutes)}"></div>
+    </div>
+    ${S.aiError ? `<div class="notice error">${h(S.aiError)}</div>` : ""}
+    ${S.canAI
+      ? `<button class="btn primary block" data-act="plan">${ICON.spark} Plan the next lesson</button>
+         <button class="btn block" data-act="saveNotesOnly">Save notes without a plan</button>`
+      : `<div class="notice">Lesson planning needs Claude. Open this page in the Claude app or at claude.ai to use it.</div>
+         <button class="btn primary block" data-act="saveNotesOnly">Save notes</button>`}
+  </main>`;
+}
+
+function viewThinking() {
+  const p = pupil();
+  return bar(p.name + ": planning", { back: "cancelPlan" }) + `<main class="wrap">
+    <div class="panel"><div class="thinking"><div class="spinner"></div><div><b>Planning ${h(p.name)}'s next lesson</b><p class="muted small">Reading your notes${S.shots.length ? " and screenshots" : ""}. This usually takes under a minute.</p></div></div></div>
+    <button class="btn block" data-act="cancelPlan">Stop</button>
+  </main>`;
+}
+
+function viewReview() {
+  const p = pupil(); const r = S.result;
+  const ups = r.skillUpdates;
+  return bar(p.name + ": review", { back: "backLog" }) + `<main class="wrap">
+    <section class="section"><span class="label">This lesson</span>
+      <div class="panel">
+        ${r.summary ? `<p>${h(r.summary)}</p>` : ""}
+        ${r.wentWell.length ? `<div class="section"><span class="label">Went well</span><ul class="plain">${r.wentWell.map((x) => `<li>${h(x)}</li>`).join("")}</ul></div>` : ""}
+        ${r.workOn.length ? `<div class="section"><span class="label">To work on</span><ul class="plain">${r.workOn.map((x) => `<li>${h(x)}</li>`).join("")}</ul></div>` : ""}
+      </div></section>
+    ${ups.length ? `<section class="section"><span class="label">Skill changes</span>
+      <div class="panel"><p class="small muted">Untick anything you don't agree with.</p>
+      ${ups.map((u, i) => { const cur = Number((p.skills || {})[u.skill]) || 0; return `<label class="update"><input type="checkbox" data-act="toggleUp" data-i="${i}" ${S.accepted[i] ? "checked" : ""}>
+        <span><b>${h(SKILL_NAME[u.skill])}</b>: ${LEVELS[cur]} → ${LEVELS[u.level]}</span>${u.reason ? `<span class="why">${h(u.reason)}</span>` : ""}</label>`; }).join("")}
+      </div></section>` : ""}
+    <section class="section"><span class="label">Next lesson</span>
+      <div class="panel">${planHTML(r.nextLesson)}
+        <div class="field"><label for="rNote">Add your own note to the plan</label><textarea id="rNote" style="min-height:80px" placeholder="Optional">${h(r.nextLesson.instructorNote || "")}</textarea></div>
+      </div></section>
+    <button class="btn primary block" data-act="saveLesson">Save lesson and plan</button>
+    <div class="row"><button class="btn" data-act="copyResult">${ICON.copy} Copy for TotalDrive</button><button class="btn" data-act="replan">Try another plan</button></div>
+  </main>`;
+}
+
+function render() {
+  const app = $("#app");
+  const v = S.view;
+  if (v === "list") app.innerHTML = viewList();
+  else if (v === "pupil") app.innerHTML = viewPupil();
+  else if (v === "newPupil" || v === "editPupil") app.innerHTML = viewEditPupil();
+  else if (v === "settings") app.innerHTML = viewSettings();
+  else if (v === "log") app.innerHTML = viewLog();
+  else if (v === "thinking") app.innerHTML = viewThinking();
+  else if (v === "review") app.innerHTML = viewReview();
+}
+
+/* ---------- AI planning ---------- */
+function recentLessonsText() {
+  return S.lessons.slice(0, 4).map((l) => {
+    const parts = [`- ${fmtDate(l.date)} (${l.minutes} min): ${l.summary || l.notes || ""}`];
+    if (arr(l.workOn).length) parts.push(`  To work on: ${arr(l.workOn).join("; ")}`);
+    if (l.plannedNext && l.plannedNext.title) parts.push(`  Plan made for the following lesson: ${l.plannedNext.title}`);
+    return parts.join("\n");
+  }).join("\n") || "None logged yet.";
+}
+
+function buildPrompt(p, dr, nShots) {
+  const s = S.settings; const sk = p.skills || {};
+  const d = daysUntil(p.testDate);
+  return `You are an expert UK driving instructor (ADI) helping another instructor review a lesson and plan the next one for a learner driver. Follow the DVSA National Standard for Driver and Rider Training and client-centred learning: goals agreed with the pupil, risk management, and the right level of instruction.
+
+INSTRUCTOR
+Usual lesson length: ${s.minutes} minutes
+Teaches in: ${s.area || "not given (describe routes by road type and feature, not street names)"}
+How they like to teach: ${s.style || "not given"}
+
+PUPIL
+Name: ${p.name}
+Car: ${p.transmission || "Manual"}
+Theory test: ${p.theory ? "passed" : "not passed yet"}
+Practical test: ${p.testDate ? `${fmtDate(p.testDate)}${d != null ? ` (${d >= 0 ? d + " days away" : "date has passed"})` : ""}` : "not booked"}
+Lessons logged before today: ${p.lessonCount || 0}
+About: ${p.about || "nothing recorded"}
+
+CURRENT SKILL LEVELS (0 Not covered, 1 Introduced, 2 Full instruction, 3 Prompted, 4 Seldom prompted, 5 Independent)
+${SKILLS.map(([k, n]) => `${k} (${n}): ${Number(sk[k]) || 0}`).join("\n")}
+
+RECENT LESSONS (newest first)
+${recentLessonsText()}
+${nShots ? `\nATTACHED: ${nShots} screenshot(s) from the instructor's TotalDrive app for this pupil (progress, lesson history or notes). Read them and use what they show alongside everything above.\n` : ""}
+TODAY'S LESSON (${dr.date}, ${dr.minutes} minutes). The instructor's spoken notes, typed by phone dictation so expect odd words:
+"""
+${dr.notes}
+"""
+
+Reply with only one JSON object, no other text, in exactly this shape:
+{
+  "summary": "2-3 sentence summary of today's lesson",
+  "wentWell": ["short point", "..."],
+  "workOn": ["short point", "..."],
+  "skillUpdates": [{"skill": "roundabouts", "level": 3, "reason": "why, from the notes"}],
+  "nextLesson": {
+    "title": "short title for the next lesson",
+    "objectives": ["goal to agree with the pupil", "..."],
+    "plan": [{"minutes": 10, "activity": "what to do", "detail": "how, and what the instructor should look for"}],
+    "routes": "the kinds of roads and features to use${s.area ? ", suited to " + s.area : ""}",
+    "briefing": "key points to cover in the briefing",
+    "watchFor": ["specific fault or risk to watch for"]
+  }
+}
+
+Rules:
+- "skill" must be one of: ${SKILLS.map(([k]) => k).join(", ")}.
+- Only include a skill update where today's notes or the screenshots clearly show a level different from the current one. Level is a whole number 0-5.
+- The minutes in "plan" must add up to ${dr.nextMinutes}. Include a short recap at the start and a debrief with reflection at the end.
+- Build the next lesson on what needs work today, while keeping the pupil confident. ${d != null && d >= 0 && d <= 28 ? "The test is close, so include test-standard practice such as independent driving and mock test elements where the pupil is ready." : ""}
+- Be specific and practical. Use British English and UK road terms.`;
+}
+
+function normaliseResult(raw) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  const nl = r.nextLesson && typeof r.nextLesson === "object" ? r.nextLesson : {};
+  const ups = (Array.isArray(r.skillUpdates) ? r.skillUpdates : [])
+    .map((u) => ({ skill: String(u && u.skill || ""), level: Math.max(0, Math.min(5, Math.round(Number(u && u.level)))), reason: String(u && u.reason || "") }))
+    .filter((u) => SKILL_NAME[u.skill] && Number.isFinite(u.level));
+  return {
+    summary: String(r.summary || ""),
+    wentWell: arr(r.wentWell).map(String),
+    workOn: arr(r.workOn).map(String),
+    skillUpdates: ups,
+    nextLesson: {
+      title: String(nl.title || "Next lesson"),
+      objectives: arr(nl.objectives).map(String),
+      plan: (Array.isArray(nl.plan) ? nl.plan : []).filter((x) => x && typeof x === "object").map((x) => ({ minutes: Number(x.minutes) || 0, activity: String(x.activity || ""), detail: String(x.detail || "") })),
+      routes: String(nl.routes || ""),
+      briefing: String(nl.briefing || ""),
+      watchFor: arr(nl.watchFor).map(String),
+    },
+  };
+}
+
+const AI_ERRORS = {
+  not_granted: "Claude wasn't allowed to run for this page. You can allow it from the page's Permissions menu, or save your notes without a plan.",
+  sampling_disabled: "Claude isn't available on this account, so planning is switched off. You can still save your notes.",
+  rate_limited: "You've hit a Claude usage limit for now. Save your notes and try planning again later.",
+  session_expired: "You've been signed out of Claude. Sign in again, then tap Plan the next lesson.",
+  image_rejected: "One of the screenshots couldn't be read. Remove it or try a different one.",
+  images_unavailable: "Screenshots can't be sent from this view. Remove them and try again.",
+  invalid_json: "The plan came back in the wrong format. Tap Plan the next lesson to try again.",
+  prompt_too_large: "Your notes are too long to send in one go. Shorten them a little and try again.",
+  refused: "Claude couldn't plan from these notes. Try rewording them.",
+};
+
+async function runPlan(fresh) {
+  const p = pupil(); const dr = S.draft;
+  if (!dr.notes.trim()) { S.aiError = "Add some notes about the lesson first."; render(); return; }
+  S.aiError = "";
+  go("thinking");
+  const ctl = (S.ctl = new AbortController());
+  try {
+    const opts = { signal: ctl.signal };
+    if (S.shots.length) opts.images = S.shots.map((s) => s.file);
+    if (fresh) opts.cache = false;
+    const raw = await S.sample.json(buildPrompt(p, dr, S.shots.length), opts);
+    if (ctl.signal.aborted) return;
+    S.result = normaliseResult(raw);
+    S.accepted = Object.fromEntries(S.result.skillUpdates.map((_, i) => [i, true]));
+    S.ctl = null;
+    go("review");
+  } catch (e) {
+    S.ctl = null;
+    if (e && e.code === "cancelled") return;
+    S.aiError = AI_ERRORS[e && e.code] || "Planning didn't finish because of a connection problem. Your notes are kept, so tap Plan the next lesson to try again.";
+    go("log");
+  }
+}
+
+async function saveLesson(withPlan) {
+  const p = pupil(); const dr = S.draft;
+  if (!withPlan && !dr.notes.trim()) { S.aiError = "Add some notes about the lesson first."; render(); return; }
+  const r = withPlan ? S.result : null;
+  if (r) r.nextLesson.instructorNote = ($("#rNote")?.value || "").trim();
+  const lesson = {
+    id: newId("l-"), date: dr.date, minutes: Number(dr.minutes) || S.settings.minutes, notes: dr.notes.trim(),
+    summary: r ? r.summary : "", wentWell: r ? r.wentWell : [], workOn: r ? r.workOn : [],
+    skillUpdates: r ? r.skillUpdates.filter((_, i) => S.accepted[i]) : [],
+    plannedNext: r ? r.nextLesson : null, createdAt: new Date().toISOString(),
+  };
+  const skills = { ...(p.skills || {}) };
+  for (const u of lesson.skillUpdates) skills[u.skill] = u.level;
+  const updated = { ...p, skills, lessonCount: (p.lessonCount || 0) + 1,
+    lastLessonDate: !p.lastLessonDate || dr.date > p.lastLessonDate ? dr.date : p.lastLessonDate,
+    nextPlan: r ? r.nextLesson : p.nextPlan || null };
+  try {
+    await writeLesson(p.id, lesson);
+    await writePupil(updated);
+  } catch (e) {
+    S.aiError = e && e.code === "quota_exceeded" ? "Storage is full. Delete pupils you no longer teach, then save again." : "The lesson couldn't be saved. Check your connection and try again.";
+    if (S.view === "review") { toast(S.aiError); return; }
+    render(); return;
+  }
+  clearDraft(p.id); S.draft = null; S.result = null; S.shots = [];
+  if (S.store !== "db") S.lessons = S.memLessons[p.id] || [];
+  go("pupil"); toast("Lesson saved");
+}
+
+/* ---------- copy ---------- */
+function planText(p, plan) {
+  if (!plan) return "";
+  const lines = [`NEXT LESSON: ${plan.title}`];
+  if (arr(plan.objectives).length) lines.push("", "Goals:", ...arr(plan.objectives).map((o) => "• " + o));
+  if (Array.isArray(plan.plan) && plan.plan.length) lines.push("", "Plan:", ...plan.plan.map((s) => `• ${s.minutes} min: ${s.activity}${s.detail ? " (" + s.detail + ")" : ""}`));
+  if (plan.routes) lines.push("", "Routes: " + plan.routes);
+  if (plan.briefing) lines.push("", "Briefing: " + plan.briefing);
+  if (arr(plan.watchFor).length) lines.push("", "Watch for:", ...arr(plan.watchFor).map((o) => "• " + o));
+  if (plan.instructorNote) lines.push("", "Note: " + plan.instructorNote);
+  return lines.join("\n");
+}
+function lessonText(l) {
+  const lines = [`Lesson ${fmtDate(l.date)} (${l.minutes} min)`];
+  if (l.summary) lines.push(l.summary);
+  if (arr(l.wentWell).length) lines.push("", "Went well:", ...arr(l.wentWell).map((x) => "• " + x));
+  if (arr(l.workOn).length) lines.push("", "To work on:", ...arr(l.workOn).map((x) => "• " + x));
+  if (!l.summary) lines.push(l.notes || "");
+  return lines.join("\n");
+}
+function copy(text, anchor) {
+  const fallback = () => {
+    document.querySelector(".copyfall")?.remove();
+    const ta = document.createElement("textarea"); ta.className = "copyfall"; ta.readOnly = true; ta.value = text;
+    anchor.insertAdjacentElement("afterend", ta); ta.focus(); ta.select();
+    toast("Select all and copy");
+  };
+  try { navigator.clipboard.writeText(text).then(() => toast("Copied. Paste it into TotalDrive"), fallback); } catch { fallback(); }
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click", async (ev) => {
+  const el = ev.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act;
+  if (act === "toggleUp") { S.accepted[el.dataset.i] = el.checked; return; }
+  if (el.tagName === "BUTTON" && el.type !== "submit") ev.preventDefault();
+  const p = pupil();
+  switch (act) {
+    case "home": go("list"); break;
+    case "settings": go("settings"); break;
+    case "addPupil": go("newPupil"); break;
+    case "open": openPupil(el.dataset.id); break;
+    case "backPupil": go("pupil"); break;
+    case "editPupil": go("editPupil"); break;
+    case "askDelete": S.confirmDelete = true; render(); break;
+    case "cancelDelete": S.confirmDelete = false; render(); break;
+    case "doDelete": {
+      el.disabled = true;
+      try { await removePupil(p.id); clearDraft(p.id); go("list"); toast("Pupil deleted"); }
+      catch { el.disabled = false; toast("Couldn't delete. Try again."); }
+      break;
+    }
+    case "log": startLog(); break;
+    case "backLog": go("log"); break;
+    case "cancelPlan": if (S.ctl) S.ctl.abort(); S.ctl = null; go("log"); break;
+    case "plan": runPlan(false); break;
+    case "replan": runPlan(true); break;
+    case "saveNotesOnly": el.disabled = true; await saveLesson(false); break;
+    case "saveLesson": el.disabled = true; await saveLesson(true); el.disabled = false; break;
+    case "rmShot": { const [s] = S.shots.splice(Number(el.dataset.i), 1); if (s) URL.revokeObjectURL(s.url); render(); break; }
+    case "level": {
+      const k = el.dataset.skill; const n = Number(el.dataset.n);
+      const cur = Number((p.skills || {})[k]) || 0;
+      const next = cur === n ? n - 1 : n;
+      const updated = { ...p, skills: { ...(p.skills || {}), [k]: next } };
+      if (S.store !== "db") { await writePupil(updated); render(); break; }
+      const i = S.pupils.findIndex((x) => x.id === p.id); S.pupils[i] = updated; render();
+      try { await writePupil(updated); } catch { toast("Couldn't save that change"); }
+      break;
+    }
+    case "copyPlan": copy(planText(p, p.nextPlan), el); break;
+    case "copyLesson": { const l = S.lessons.find((x) => x.id === el.dataset.id); if (l) copy(lessonText(l) + (l.plannedNext ? "\n\n" + planText(p, l.plannedNext) : ""), el); break; }
+    case "copyResult": {
+      const r = S.result; const nl = { ...r.nextLesson, instructorNote: ($("#rNote")?.value || "").trim() };
+      copy(lessonText({ date: S.draft.date, minutes: S.draft.minutes, summary: r.summary, wentWell: r.wentWell, workOn: r.workOn }) + "\n\n" + planText(p, nl), el);
+      break;
+    }
+  }
+});
+
+document.addEventListener("input", (ev) => {
+  const id = ev.target.id;
+  if (S.view === "log" && S.draft) {
+    if (id === "lNotes") S.draft.notes = ev.target.value;
+    else if (id === "lDate") S.draft.date = ev.target.value;
+    else if (id === "lMins") S.draft.minutes = ev.target.value;
+    else if (id === "lNext") S.draft.nextMinutes = ev.target.value;
+    else return;
+    saveDraft();
+  }
+});
+
+document.addEventListener("change", (ev) => {
+  if (ev.target.id !== "shotInput") return;
+  const lim = S.imgLimits;
+  for (const f of ev.target.files) {
+    if (S.shots.length >= lim.maxCount) { toast(`Up to ${lim.maxCount} screenshots`); break; }
+    if (f.size > lim.maxInputBytes) { toast("That image is too large"); continue; }
+    S.shots.push({ file: f, url: URL.createObjectURL(f) });
+  }
+  render();
+});
+
+document.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const btn = ev.target.querySelector("[type=submit]"); btn.disabled = true;
+  try {
+    if (ev.target.id === "pupilForm") {
+      const name = $("#pName").value.trim(); if (!name) { btn.disabled = false; return; }
+      const existing = S.view === "editPupil" ? pupil() : null;
+      const p = { ...(existing || { id: newId("p-"), skills: {}, lessonCount: 0, createdAt: new Date().toISOString(), nextPlan: null }),
+        name, testDate: $("#pTest").value, transmission: $("#pTrans").value, theory: $("#pTheory").checked, about: $("#pAbout").value.trim() };
+      await writePupil(p);
+      if (!existing) { const i = S.pupils.findIndex((x) => x.id === p.id); if (i < 0) S.pupils.push(p); openPupil(p.id); }
+      else go("pupil");
+      toast(existing ? "Saved" : "Pupil added");
+    } else if (ev.target.id === "settingsForm") {
+      await writeSettings({ minutes: Math.max(15, Number($("#sMins").value) || 90), area: $("#sArea").value.trim(), style: $("#sStyle").value.trim() });
+      go("list"); toast("Settings saved");
+    }
+  } catch (e) {
+    btn.disabled = false;
+    toast(e && e.code === "quota_exceeded" ? "Storage is full" : "Couldn't save. Check your connection and try again.");
+  }
+});
+
+/* ---------- boot ---------- */
+(async () => {
+  render();
+  const use = (n) => (window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
+  const [db, user, sample] = await Promise.all([use("db"), use("user"), use("sample")]);
+  if (sample) {
+    S.sample = sample; S.canAI = true;
+    const lim = await sample.limits().catch(() => null);
+    S.imgLimits = lim && lim.images ? lim.images : null;
+  }
+  const uid = user ? await user.id().catch(() => null) : null;
+  if (db && uid) {
+    S.db = db; S.uid = uid; S.base = "data/users/" + uid; S.store = "db";
+    db.collection(S.base).onSnapshot((snap) => {
+      const pupils = []; let settings = null;
+      for (const d of snap.docs) { const v = d.data(); if (v.kind === "settings") settings = v; else if (v.kind === "pupil") pupils.push({ ...v, id: d.id }); }
+      S.pupils = pupils; S.settings = { ...DEFAULT_SETTINGS, ...(settings || {}) }; delete S.settings.kind;
+      S.ready = true;
+      if (S.view === "pupil" && !pupil()) S.view = "list";
+      if (S.view === "list" || S.view === "pupil") render();
+    }, () => { S.store = "memory"; S.ready = true; render(); });
+  } else {
+    S.store = "memory"; S.ready = true; render();
+  }
+  render();
+})();
+</script>
