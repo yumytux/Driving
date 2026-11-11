@@ -601,6 +601,26 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px soli
 .mtbl tr:last-child td{border-bottom:0}
 .mtbl td.r,.mtbl th.r{text-align:right;font-variant-numeric:tabular-nums}
 
+/* Business */
+.bizgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:14px;align-items:start}
+.bizgrid>*{min-width:0}
+.chk-head{display:flex;gap:8px;align-items:center;margin-bottom:4px}
+.chk-head h3{margin:0}
+.chk-list{display:grid;gap:1px;margin:2px -8px 0}
+.chk-row{display:flex;gap:11px;align-items:center;padding:8px;border-radius:10px;cursor:pointer;font-size:14.5px;line-height:1.35}
+label.chk-row:hover{background:var(--raised)}
+.chk-row input[type=checkbox]{width:20px;height:20px;accent-color:var(--brand-btn);flex:none}
+.chk-row.on span{color:var(--faint);text-decoration:line-through}
+.chk-row.ed{cursor:default;padding:3px 8px;gap:6px}
+.drow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line)}
+.card>.drow:first-of-type{border-top:0}
+.drow .main{flex:1;min-width:min(100%,170px)}
+.drow .main small{display:block;color:var(--muted);font-size:12.5px}
+.idea .main{white-space:pre-wrap;font-size:14px}
+.idea.used .main{color:var(--faint)}
+.goal .meter{height:8px}
+.fbout{min-height:190px;font-size:15px;line-height:1.5;font-family:var(--f-body)}
+.card a{color:var(--info)}
 /* TotalDrive transfer */
 .tdbtn .cnt{background:var(--warn-bg);color:var(--warn);font-family:var(--f-mono);font-size:11.5px;font-weight:700;border-radius:6px;padding:1px 6px}
 .tdrow.ok{background:var(--raised);border-color:transparent}
@@ -644,7 +664,7 @@ dialog#sheet.wide{width:min(720px,calc(100vw - 24px))}
   <section id="tab-diary" hidden></section>
   <section id="tab-pupils" hidden><div id="pupils-head"></div><div id="pupils-list"></div><div id="tab-avail" hidden></div></section>
   <section id="tab-lessons" hidden></section>
-  <section id="tab-money" hidden></section>
+  <section id="tab-money" hidden><div id="biz-head"></div><div id="biz-body"></div></section>
   <section id="tab-settings" hidden></section>
 </main>
 <nav class="tabbar" id="tabbar" role="tablist" aria-label="Sections"></nav>
@@ -678,8 +698,8 @@ function defaultState(){
       pref:'compact',avoidConsecutive:true,allowSameDay:false,rate:40},
     areas:[],travel:{},pupils:[],recurring:[],progress:{}};
 }
-function emptyWeek(){return {lessons:[],blocks:[],skip:[],tdGone:[]}}
-function normWeek(w){w=w||{};return {lessons:Array.isArray(w.lessons)?w.lessons:[],blocks:Array.isArray(w.blocks)?w.blocks:[],skip:Array.isArray(w.skip)?w.skip:[],tdGone:Array.isArray(w.tdGone)?w.tdGone:[]}}
+function emptyWeek(){return {lessons:[],blocks:[],skip:[],tdGone:[],checks:{}}}
+function normWeek(w){w=w||{};return {lessons:Array.isArray(w.lessons)?w.lessons:[],blocks:Array.isArray(w.blocks)?w.blocks:[],skip:Array.isArray(w.skip)?w.skip:[],tdGone:Array.isArray(w.tdGone)?w.tdGone:[],checks:(w.checks&&typeof w.checks==='object'&&!Array.isArray(w.checks))?w.checks:{}}}
 function isOff(p){return (p.status&&p.status!=='active')||week.skip.includes(p.id)}
 let pendingLegacy=null; // old single-week data waiting to move into its own week
 function normalize(s){
@@ -730,7 +750,7 @@ function flush(){
   const mj=JSON.stringify(state);
   if(mj!==lastMain){lastMain=mj;write(mainRef,JSON.parse(mj));wrote=true}
   const wj=JSON.stringify(week);
-  const fresh=lastWeek[viewWeek]===undefined&&!week.lessons.length&&!week.blocks.length&&!week.skip.length&&!week.tdGone.length;
+  const fresh=lastWeek[viewWeek]===undefined&&!week.lessons.length&&!week.blocks.length&&!week.skip.length&&!week.tdGone.length&&!Object.keys(week.checks).length;
   if(wj!==lastWeek[viewWeek]&&!fresh){lastWeek[viewWeek]=wj;write(db.doc('weeks/'+viewWeek),JSON.parse(wj));wrote=true}
   if(!wrote)setSync('Saved');
 }
@@ -943,8 +963,8 @@ function optimise(onProgress){
 const $=id=>document.getElementById(id);
 let tab='today',selDay=0,lastUnplaced=null,pupilTab='active',pupilQ='',pupilsView='list',diaryView='grid';
 const PPM=1.15; // px per minute
-const TABS=[['today','Today'],['diary','Diary'],['pupils','Pupils'],['lessons','Teach'],['money','Money']];
-const HASH={today:'today',diary:'diary',pupils:'pupils',lessons:'teach',money:'money',settings:'setup'};
+const TABS=[['today','Today'],['diary','Diary'],['pupils','Pupils'],['lessons','Teach'],['money','Business']];
+const HASH={today:'today',diary:'diary',pupils:'pupils',lessons:'teach',money:'business',settings:'setup'};
 try{const o=JSON.parse(localStorage.getItem(KEY+':ui')||'{}');if(o.dv)diaryView=o.dv;if(o.pv)pupilsView=o.pv}catch(e){}
 function rememberUi(){try{localStorage.setItem(KEY+':ui',JSON.stringify({dv:diaryView,pv:pupilsView}))}catch(e){}}
 
@@ -953,7 +973,8 @@ const IC={
   diary:'<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   pupils:'<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 5.2a3.5 3.5 0 0 1 0 6.6M18.5 14.8c1.7.8 2.7 2.5 3 5.2"/>',
   lessons:'<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.500-.5 6.500 0 8.500 1.5 2-1.500 5-2 8.500-1.500V5C17 4.500 14 5 12 6.500zM12 6.500V19.500"/>',
-  money:'<circle cx="12" cy="12" r="8.500"/><path d="M14.500 9.200c-.300-1.200-1.200-1.900-2.400-1.900-1.500 0-2.400 1-2.400 2.500 0 2.200 1.100 3.200-.700 6.200h5.800M8.500 12.500h5"/>',
+  money:'<rect x="3.5" y="7.5" width="17" height="12" rx="2.5"/><path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5M3.5 12.5h17"/>',
+  pound:'<circle cx="12" cy="12" r="8.500"/><path d="M14.500 9.200c-.300-1.200-1.200-1.900-2.400-1.900-1.500 0-2.400 1-2.400 2.500 0 2.200 1.100 3.200-.700 6.200h5.800M8.500 12.500h5"/>',
   gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.500v3M12 18.500v3M2.500 12h3M18.500 12h3M5.300 5.300l2.100 2.100M16.600 16.600l2.100 2.100M5.300 18.700l2.100-2.100M16.600 7.400l2.100-2.100"/>',
   check:'<path d="M5 12.500l4.500 4.500L19 7.500"/>',
   left:'<path d="M14.500 5.500 8 12l6.500 6.500"/>',right:'<path d="M9.500 5.500 16 12l-6.500 6.500"/>',
@@ -1077,7 +1098,7 @@ function renderNav(){
 function setTab(t){
   tab=t;
   try{if(location.hash!=='#'+HASH[t])location.hash=HASH[t]}catch(e){}
-  if(t==='today'&&viewWeek!==nowWeek())switchWeek(nowWeek());else renderAll();
+  if((t==='today'||t==='money')&&viewWeek!==nowWeek())switchWeek(nowWeek());else renderAll();
   window.scrollTo(0,0);
 }
 function tabFromHash(){const h=(location.hash||'').slice(1);return Object.keys(HASH).find(k=>HASH[k]===h)||null}
@@ -1086,7 +1107,7 @@ function renderAll(){
   document.body.classList.toggle('tdmode',TD());if(TD()&&lpView==='overview')lpView='sequence';
   renderNav();
   ['today','diary','pupils','lessons','money','settings'].forEach(t=>$('tab-'+t).hidden=t!==tab);
-  ({today:renderToday,diary:renderDiary,pupils:renderPupils,lessons:renderLessons,money:renderMoney,settings:renderSettings})[tab]();
+  ({today:renderToday,diary:renderDiary,pupils:renderPupils,lessons:renderLessons,money:renderBiz,settings:renderSettings})[tab]();
 }
 
 function weekRange(){
@@ -1143,6 +1164,7 @@ function attention(){
   const ow=TD()?[]:owedItems();if(ow.length)out.push({s:'warn',n:'£',t:`${money(ow.reduce((a,x)=>a+x.fee,0))} unpaid across ${ow.length} lesson${ow.length>1?'s':''}`,act:'go-money'});
   state.pupils.filter(p=>p.status==='active').map(p=>({p,ti:testInfo(p)})).filter(x=>x.ti&&x.ti.n>=0&&x.ti.n<=28).sort((a,b)=>a.ti.n-b.ti.n)
     .forEach(({p,ti})=>out.push({s:ti.cls==='bad'?'bad':'warn',n:ti.n,t:`${p.name}: ${ti.txt.toLowerCase()} (${ti.when})`,act:'open-pupil',id:p.id}));
+  upcoming().filter(x=>x.n<=30).forEach(x=>out.push({s:x.n<=7?'bad':'warn',n:x.n<0?'!':x.n,t:`${x.label}: ${x.n<0?'overdue since':'due'} ${niceDate(x.date)}`,act:'go-dates'}));
   const ub=underBooked();if(ub.length)out.push({s:'warn',n:ub.length,t:`pupil${ub.length>1?'s':''} still to fit in this week`,act:'go-diary'});
   const na=state.pupils.filter(p=>p.status==='active'&&!p.avail.length).length;if(na)out.push({s:'info',n:na,t:`active pupil${na>1?'s have':' has'} no free times entered`,act:'go-avail'});
   const wl=state.pupils.filter(p=>p.status==='waiting').length;if(wl)out.push({s:'info',n:wl,t:`on the waiting list`,act:'go-waiting'});
@@ -1182,6 +1204,7 @@ function renderToday(){
   h+='</div><div>';
   const at=attention();
   h+=`<div class="sect"><h3>Needs attention</h3>${at.length?`<div class="attn">${at.map(a=>`<button type="button" data-act="${a.act}" ${a.id?`data-id="${a.id}"`:''}><span class="sev ${a.s}">${a.n}</span><span>${esc(a.t)}</span><span class="go" aria-hidden="true">›</span></button>`).join('')}</div>`:`<div class="attn"><button type="button" data-act="go-diary"><span class="sev ok">✓</span><span>Nothing needs you right now</span><span class="go" aria-hidden="true">›</span></button></div>`}</div>`;
+  h+=jobsCard();
   const dm=[0,1,2,3,4,5,6].map(d=>dayMetrics(dayLessons(d)).mins);const mx=Math.max(60,...dm);const t=totals();
   h+=`<div class="sect"><h3>This week <span>${t.booked} of ${t.want} lessons · ${hrs(t.mins)} h · ${money(t.income)}</span></h3><div class="wkbars" role="group" aria-label="Teaching hours each day">${DAYS.map((d,i)=>{const off=!S().days[i].on||allBlocks().some(b=>b.day===i&&b.start<=0&&b.end>=1440);return `<button type="button" class="${i===ti?'today':''} ${off&&!dm[i]?'off':''}" data-act="go-day" data-day="${i}" aria-label="${DAYS_LONG[i]}: ${hrs(dm[i])} hours"><span class="v">${dm[i]?hrs(dm[i]):off?'off':''}</span><span class="b"><i style="height:${dm[i]/mx*100}%"></i></span><span class="d">${d}</span></button>`}).join('')}</div></div>`;
   h+='</div></div>';
@@ -1478,15 +1501,15 @@ function lpOverview(){
 /* ---------- Money ---------- */
 function weekSum(wk,w){let fee=0,paid=0,mins=0,n=0,owe=0;for(const l of w.lessons){if(gone(l))continue;const f=feeOf(l);fee+=f;mins+=l.dur;n++;if(l.paid)paid+=f;else if(owes(wk,l))owe+=f}return {fee,paid,mins,n,owe}}
 function renderMoney(){
-  const el=$('tab-money');
-  if(!allLoaded)loadAllWeeks().then(()=>{if(allLoaded&&tab==='money')renderMoney()});
+  const el=$('biz-body');
+  if(!allLoaded)loadAllWeeks().then(()=>{if(allLoaded&&tab==='money')renderAll()});
   const map=Object.fromEntries(allWeeks());const nw=nowWeek();
   const wks=[];for(let i=7;i>=0;i--){const k=addDays(nw,-7*i);wks.push({k,s:weekSum(k,normWeek(map[k]))})}
   const cur=wks[7].s,nxt=weekSum(addDays(nw,7),normWeek(map[addDays(nw,7)]));
   const td=TD();const ow=td?[]:owedItems();const owTotal=ow.reduce((a,x)=>a+x.fee,0);
   const prev4=wks.slice(3,7).reduce((a,x)=>a+x.s.fee,0)/4;
   const mx=Math.max(1,...wks.map(x=>x.s.fee));
-  let h=`<div class="hero"><div style="flex:1;min-width:min(100%,260px)"><div class="eyebrow">Money</div><h2 class="t-date" style="font-size:clamp(24px,5vw,32px)">${td?'Takings from the diary':'Takings and what’s owed'}</h2></div><div class="actions"><button type="button" class="btn" data-act="csv">Download lessons (CSV)</button></div></div>`;
+  let h=`<div class="hero"><div style="flex:1;min-width:min(100%,260px)"><h3 style="margin:0">${td?'Takings from the diary':'Takings and what’s owed'}</h3></div><div class="actions"><button type="button" class="btn" data-act="csv">Download lessons (CSV)</button></div></div>`;
   h+=`<div class="tiles">
     <div class="tile"><div class="k">This week</div><div class="v">${money(cur.fee)}</div><div class="s">${cur.n} lesson${cur.n===1?'':'s'} · ${hrs(cur.mins)} h${td?'':' · '+money(cur.paid)+' paid'}</div></div>
     <div class="tile ${owTotal?'owe':''}" ${td?'hidden':''}><div class="k">Owed to you</div><div class="v">${money(owTotal)}</div><div class="s">${ow.length?`${ow.length} unpaid lesson${ow.length>1?'s':''} already taken`:'Nothing outstanding'}</div></div>
@@ -1900,6 +1923,229 @@ document.addEventListener('keydown',e=>{
   else if(k==='b'){if(tab!=='diary')setTab('diary');const b=$('genBtn');if(b)b.click()}
   else if(tab==='diary'&&e.key==='ArrowLeft')switchWeek(addDays(viewWeek,-7));
   else if(tab==='diary'&&e.key==='ArrowRight')switchWeek(addDays(viewWeek,7));
+});
+
+/* ================= Business: routine, vehicle, dates, MTD, Facebook, goals ================= */
+const BIZ_DEF={
+  routine:['Send pupils next week’s lesson times','Enter next week into TotalDrive','Update progress and payments in TotalDrive','Check upcoming tests and book mock tests','Reply to enquiries and update the waiting list','Log receipts and mileage in your tax software','Sunday review: who’s stuck, who’s test-ready','Download a backup'],
+  vehicle:['Tyres: pressures and tread, including the spare or repair kit','Lights, indicators and brake lights all working','Oil, coolant and screenwash levels','Wipers and washers clear the screen','Dual controls move freely and return','Mirrors, including the extra instructor mirrors','L-plates and roof sign secure and readable','Clean inside and out, windows and touch points','Fuel or charge for the week','First-aid kit, documents and ADI badge in the car'],
+  posts:['Pass photo or pupil milestone','Spaces available this week','Driving tip or Highway Code question','Ask a recent passer for a review','Reply to comments and messages'],
+  dates:[['MOT',12],['Service',12],['Car insurance',12],['Road tax',12],['Breakdown cover',12],['ADI badge renewal',48],['Standards check',0]],
+  ideas:['Mock test day: what the examiner is really looking for','The three most common reasons people fail, and how we practise them','Myth: you can’t cross your hands on the test','What to bring on test day','Why two-hour lessons can save you money','A local roundabout explained, lane by lane','Winter driving: five checks before you set off','Behind the scenes: what the dual controls do']
+};
+function B(){
+  const b=state.biz||(state.biz={});
+  for(const [k,pre] of [['routine','r'],['vehicle','v'],['posts','f']])if(!Array.isArray(b[k]))b[k]=BIZ_DEF[k].map((t,i)=>({id:pre+i,text:t}));
+  if(!Array.isArray(b.dates))b.dates=BIZ_DEF.dates.map(([l,e],i)=>({id:'d'+i,label:l,date:'',every:e}));
+  if(!Array.isArray(b.ideas))b.ideas=BIZ_DEF.ideas.map((t,i)=>({id:'i'+i,text:t}));
+  if(!b.goals||typeof b.goals!=='object')b.goals={};
+  if(!b.mtdDone||typeof b.mtdDone!=='object')b.mtdDone={};
+  return b;
+}
+let bizView='week',bizEdit=null;
+try{const v=localStorage.getItem(KEY+':biz');if(v)bizView=v}catch(e){}
+const BIZ_VIEWS=[['week','This week'],['dates','Dates and tax'],['facebook','Facebook'],['money','Money and goals']];
+const LISTS={routine:['Weekly routine','The jobs that keep the business running. Ticks reset every Monday.'],vehicle:['Vehicle check','Walk round the car once a week, before the first lesson.'],posts:['Facebook this week','A steady mix keeps the page active and the enquiries coming.']};
+function listProg(k){const it=B()[k];return [it.filter(i=>week.checks[i.id]).length,it.length]}
+function listCard(k){
+  const [t,help]=LISTS[k];const it=B()[k];const [d,n]=listProg(k);const ed=bizEdit===k;
+  let h=`<div class="card"><div class="chk-head"><h3>${t}</h3><span class="pill ${n&&d>=n?'ok':''}">${d}/${n}</span><span class="spacer" style="flex:1"></span><button type="button" class="btn sm ghost" data-act="biz-edit" data-k="${k}">${ed?'Finish editing':'Edit list'}</button></div><p class="help">${help}</p><div class="chk-list">`;
+  h+=it.map((i,ix)=>ed?`<div class="chk-row ed"><input type="text" data-biz="item" data-k="${k}" data-id="${i.id}" value="${esc(i.text)}" aria-label="Item ${ix+1}"><button type="button" class="btn sm ghost" data-act="biz-up" data-k="${k}" data-id="${i.id}" aria-label="Move up" ${ix?'':'disabled'}>↑</button><button type="button" class="x" data-act="biz-del" data-k="${k}" data-id="${i.id}" aria-label="Remove">×</button></div>`
+    :`<label class="chk-row ${week.checks[i.id]?'on':''}"><input type="checkbox" data-biz="tick" data-id="${i.id}" ${week.checks[i.id]?'checked':''}><span>${esc(i.text)}</span></label>`).join('');
+  h+='</div>';
+  if(ed)h+=`<div class="row" style="margin-top:8px"><input type="text" id="new-${k}" data-biz="new" data-k="${k}" placeholder="Add an item" style="flex:1"><button type="button" class="btn sm" data-act="biz-add" data-k="${k}">Add</button></div>`;
+  else if(n&&d<n)h+=`<div class="row" style="margin-top:8px"><button type="button" class="btn sm" data-act="biz-all" data-k="${k}">Tick all</button></div>`;
+  if(k==='vehicle'&&!ed){
+    const ids=it.map(i=>i.id);let last=null;
+    for(const [wk,w] of allWeeks().reverse()){const c=wk===viewWeek?week.checks:(w.checks||{});if(ids.length&&ids.every(id=>c[id])){last=wk;break}}
+    h+=`<p class="help" style="margin:10px 0 0">${last?(last===viewWeek?'Full check done this week.':'Last full check: week of '+shortDate(new Date(last+'T12:00:00'))+'.'):'No full check recorded yet.'}</p>`;
+  }
+  return h+'</div>';
+}
+
+/* ---- dates and MTD ---- */
+function mtdItems(){
+  const b=B(),from=+b.mtdFrom||0,out=[],y=new Date().getFullYear();
+  const ty=a=>`${a}/${String((a+1)%100).padStart(2,'0')}`;
+  for(let a=y-1;a<=y+1;a++){
+    if(from&&a>=from)[[`${a}-08-07`,'Quarter 1 update','6 April to 5 July'],[`${a}-11-07`,'Quarter 2 update','6 July to 5 October'],[`${a+1}-02-07`,'Quarter 3 update','6 October to 5 January'],[`${a+1}-05-07`,'Quarter 4 update','6 January to 5 April']]
+      .forEach(([d,l,p])=>out.push({id:'mtd'+d,date:d,label:`MTD ${l}, ${ty(a)}`,sub:`Covers ${p}. Send from your MTD software.`,mtd:1}));
+    out.push({id:'mtd'+(a+2)+'-01-31',date:`${a+2}-01-31`,label:`${from&&a>=from?'Final declaration':'Self Assessment return'} for ${ty(a)}`,sub:'Online deadline, with any tax still owed and the first payment on account.',mtd:1});
+    out.push({id:'mtd'+(a+1)+'-07-31',date:`${a+1}-07-31`,label:`Second payment on account, ${ty(a)}`,sub:'Only if HMRC asks you to make payments on account.',mtd:1});
+  }
+  return out.filter(x=>!b.mtdDone[x.id]&&daysUntil(x.date)>-60&&daysUntil(x.date)<400).sort((p,q)=>p.date.localeCompare(q.date));
+}
+function upcoming(){
+  const ds=B().dates.filter(d=>d.date).map(d=>({id:d.id,date:d.date,label:d.label,sub:d.note||'',every:d.every}));
+  return ds.concat(mtdItems()).map(x=>Object.assign(x,{n:daysUntil(x.date)})).sort((a,b)=>a.date.localeCompare(b.date));
+}
+function duePill(n){return `<span class="pill ${n<0?'bad':n<=14?'bad':n<=45?'warn':'info'}">${n<0?`${-n} day${n===-1?'':'s'} overdue`:n===0?'Today':n===1?'Tomorrow':n<60?`In ${n} days`:`In ${Math.round(n/30.4)} months`}</span>`}
+function dateRow(x){return `<div class="drow"><div class="main"><b>${esc(x.label)}</b><small>${niceDate(x.date)} ${new Date(x.date+'T12:00:00').getFullYear()}${x.sub?' · '+esc(x.sub):''}</small></div>${duePill(x.n)}<div class="row">${x.mtd?'':`<button type="button" class="btn sm ghost" data-act="date-edit" data-id="${x.id}">Edit</button>`}<button type="button" class="btn sm" data-act="date-done" data-id="${x.id}">Done</button></div></div>`}
+function dateSheet(d){
+  const isNew=!d;d=d?Object.assign({},d):{id:'d'+uid(),label:'',date:'',every:12,note:''};
+  openSheet(`<div class="sh"><h2>${isNew?'Add a date':'Key date'}</h2><button type="button" class="x" data-act="close" aria-label="Close">×</button></div><div class="sb">
+    <label class="f"><span>What is it?</span><input type="text" id="kd-label" value="${esc(d.label)}" placeholder="MOT, insurance, ADI badge…"></label>
+    <div class="grid2"><label class="f"><span>Due date</span><input type="date" id="kd-date" value="${esc(d.date||'')}"></label>
+    <label class="f"><span>Repeats</span><select id="kd-every">${[[0,'One-off'],[1,'Every month'],[3,'Every 3 months'],[6,'Every 6 months'],[12,'Every year'],[24,'Every 2 years'],[48,'Every 4 years']].map(([v,n])=>`<option value="${v}" ${+d.every===v?'selected':''}>${n}</option>`).join('')}</select></label></div>
+    <label class="f"><span>Note</span><input type="text" id="kd-note" value="${esc(d.note||'')}" placeholder="Garage, policy number, cost"></label>
+    <p class="note bad" id="kd-err" hidden></p>
+  </div><div class="sf">${isNew?'':`<button type="button" class="btn danger" data-act="date-del">Delete</button>`}<span class="spacer"></span><button type="button" class="btn" data-act="close">Cancel</button><button type="button" class="btn primary" data-act="date-save">Save</button></div>`,{kd:d,isNew});
+}
+function addMonths(iso,m){const d=new Date(iso+'T12:00:00');const day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+m);d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));return d.toISOString().slice(0,10)}
+
+/* ---- Facebook ---- */
+const fb={type:'pass',pupil:'',topic:'',extra:'',tone:'Friendly',out:'',busy:false,msg:''};
+const FB_TYPES=[['pass','Test pass'],['spaces','Spaces available'],['tip','Driving tip'],['review','Ask for reviews'],['custom','Something else']];
+function freeSlots(){
+  const s=S(),out=[];
+  for(let d=0;d<7;d++){
+    const dh=s.days[d];if(!dh.on||(viewWeek===nowWeek()&&d<todayIdx()))continue;
+    const busy=[...dayLessons(d).map(l=>[l.start-(+s.gap||0),l.start+l.dur+(+s.gap||0)]),...allBlocks().filter(b=>b.day===d).map(b=>[b.start,b.end])].sort((a,b)=>a[0]-b[0]);
+    let t=dh.start;const fr=[];
+    for(const [a,b] of busy){if(a-t>=60)fr.push([t,Math.min(a,dh.end)]);t=Math.max(t,b)}
+    if(dh.end-t>=60)fr.push([t,dh.end]);
+    if(fr.length)out.push(DAYS_LONG[d]+' '+fr.map(([a,b])=>f12(a)+'–'+f12(b)).join(', '));
+  }
+  return out;
+}
+function fbBrief(){
+  const who=(S().signoff||'').trim();const areas=state.areas.map(a=>a.name).join(', ');const p=pupil(fb.pupil);const tp=lpTopic(fb.topic)||LP_ALL[9];const ex=fb.extra.trim();
+  let task='';
+  if(fb.type==='pass')task=`Congratulate ${p?first(p):'a pupil'} on passing their driving test. Warm and proud, about them rather than the instructor.${ex?' Details to include: '+ex:''}`;
+  else if(fb.type==='spaces'){const fs=freeSlots();task=`Announce that lesson spaces are available. Free times for the week of ${shortDate(dateFor(0))}: ${fs.length?fs.join('; '):'limited, ask for details'}. Summarise the times naturally rather than listing every slot, and invite people to message the page.${ex?' Also mention: '+ex:''}`}
+  else if(fb.type==='tip')task=`Share one short, practical driving tip about "${tp.name}" for learner drivers. Use these teaching points as the factual basis: ${tp.points.slice(0,4).join('; ')}. End with a question to invite comments.${ex?' Also: '+ex:''}`;
+  else if(fb.type==='review')task=`Ask past and current pupils to leave a recommendation or review on the page, and say why it helps a small local business.${ex?' Also mention: '+ex:''}`;
+  else task=ex||'Write a friendly update from the driving school.';
+  return `You write Facebook posts for a UK driving instructor's business page. Write one post, ready to paste.\n\nRules: British English. Tone: ${fb.tone.toLowerCase()}. 50 to 110 words. Plain text only, no markdown, no headings. At most two emoji and at most three hashtags, on the last line. Do not invent names, prices, phone numbers, dates or results that are not given below. Reply with the post text only.\n\nBusiness: ${who||'an independent driving instructor'}${areas?'. Areas covered: '+areas:''}.\n\nTask: ${task}`;
+}
+function fbTemplate(){
+  const p=pupil(fb.pupil);const ex=fb.extra.trim();const tp=lpTopic(fb.topic)||LP_ALL[9];
+  if(fb.type==='pass')return `Huge congratulations to ${p?first(p):'…'} on passing their driving test! 🎉 ${ex?ex+' ':''}All the hard work paid off. Enjoy the freedom, and drive safely!`;
+  if(fb.type==='spaces'){const fs=freeSlots();return `Lesson spaces available for the week of ${shortDate(dateFor(0))}:\n${fs.join('\n')||'Message for times'}\n\nMessage the page to book.${ex?' '+ex:''}`}
+  if(fb.type==='tip')return `Driving tip: ${tp.name}\n\n${tp.points.slice(0,3).map(x=>'• '+x).join('\n')}\n\nWhat do you find hardest about this? Let me know in the comments.`;
+  if(fb.type==='review')return `If you’ve passed with me, or you’re learning now, a quick recommendation on this page makes a real difference to a small local business. Thank you! 🙏`;
+  return ex;
+}
+async function fbWrite(){
+  if(fb.busy)return;fb.busy=true;fb.msg='';renderBiz();
+  try{
+    const sample=window.claude&&window.claude.use?await window.claude.use('sample'):null;
+    if(!sample){fb.out=fbTemplate();fb.msg='Claude isn’t available in this view, so this is a basic template to edit.'}
+    else{const r=await sample(fbBrief(),{cache:false,onText:({text})=>{const ta=$('fb-out');if(ta)ta.value=text}});fb.out=(r.text||'').trim();if(r.truncated)fb.msg='That was cut short. Try again, or trim what you asked for.'}
+  }catch(e){
+    if(e&&e.text)fb.out=e.text;else if(!fb.out)fb.out=fbTemplate();
+    fb.msg=e&&e.code==='rate_limited'?'Claude is busy. Give it a minute and try again.':e&&e.code==='not_granted'?'Claude writing is switched off for this page, so this is a basic template to edit.':'Claude couldn’t write that just now, so this is a basic template to edit.';
+  }
+  fb.busy=false;if(tab==='money'&&bizView==='facebook')renderBiz();
+}
+function fbCard(){
+  const passed=state.pupils.filter(p=>p.status==='passed'),others=state.pupils.filter(p=>p.status==='active');
+  let f='';
+  if(fb.type==='pass')f=`<label class="f"><span>Who passed?</span><select data-fb="pupil"><option value="">Choose a pupil</option>${passed.length?`<optgroup label="Passed">${passed.map(p=>`<option value="${p.id}" ${fb.pupil===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</optgroup>`:''}<optgroup label="Active">${others.map(p=>`<option value="${p.id}" ${fb.pupil===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</optgroup></select></label>`;
+  if(fb.type==='tip')f=`<label class="f"><span>Topic</span><select data-fb="topic">${STAGES.map(s=>`<optgroup label="Stage ${s.n}: ${esc(s.name)}">${s.topics.map(t=>`<option value="${t.id}" ${(fb.topic||'meeting')===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</optgroup>`).join('')}</select></label>`;
+  if(fb.type==='spaces'){const fs=freeSlots();f=`<div class="note small"><b>Free in the week of ${shortDate(dateFor(0))}</b><br>${fs.length?fs.map(esc).join('<br>'):'No gaps of an hour or more left in your working hours.'}</div>`}
+  const ph={pass:'First-time pass, test centre, number of faults…',spaces:'Offer, areas, automatic or manual…',tip:'Anything specific to mention',review:'Anything specific to mention',custom:'What should the post say?'}[fb.type];
+  return `<div class="card"><h3>Write a post</h3><p class="help">Pick what the post is for and Claude drafts it for you to edit and copy. Only the pupil’s first name is used.</p>
+    <div class="seg" style="flex-wrap:wrap;margin-bottom:12px" role="group" aria-label="Post type">${FB_TYPES.map(([k,n])=>`<button type="button" data-act="fb-type" data-v="${k}" aria-pressed="${fb.type===k}">${n}</button>`).join('')}</div>
+    <div style="display:grid;gap:10px">${f}
+    <label class="f"><span>${fb.type==='custom'?'What it’s about':'Details to include (optional)'}</span><textarea data-fb="extra" rows="2" placeholder="${ph}">${esc(fb.extra)}</textarea></label>
+    <div class="row"><div class="seg" role="group" aria-label="Tone">${['Friendly','Professional','Fun'].map(t=>`<button type="button" data-act="fb-tone" data-v="${t}" aria-pressed="${fb.tone===t}">${t}</button>`).join('')}</div><span style="flex:1"></span><button type="button" class="btn primary" data-act="fb-write" ${fb.busy?'disabled':''}>${fb.busy?'Writing…':fb.out?'Write another':'Write post'}</button></div>
+    ${fb.out||fb.busy?`<textarea id="fb-out" class="fbout" data-fb="out" rows="8" aria-label="Post text">${esc(fb.out)}</textarea>${fb.msg?`<p class="note small" style="margin:0">${esc(fb.msg)}</p>`:''}<div class="row"><button type="button" class="btn" data-act="fb-copy">Copy post</button><button type="button" class="btn ghost" data-act="fb-save">Save to ideas</button></div>`:''}
+    </div></div>`;
+}
+function ideasCard(){
+  const it=B().ideas;
+  return `<div class="card"><div class="chk-head"><h3>Ideas bank</h3><span class="pill">${it.filter(i=>!i.used).length} unused</span></div><p class="help">Post ideas and saved drafts. Mark one as used once it’s gone out.</p>
+    <div class="row" style="margin-bottom:8px"><input type="text" id="new-idea" data-biz="new-idea" placeholder="Add an idea" style="flex:1"><button type="button" class="btn sm" data-act="idea-add">Add</button></div>
+    ${it.length?it.slice().sort((a,b)=>(!!a.used)-(!!b.used)).map(i=>`<div class="drow idea ${i.used?'used':''}"><div class="main">${esc(i.text)}</div><div class="row"><button type="button" class="btn sm ghost" data-act="idea-copy" data-id="${i.id}">Copy</button><button type="button" class="btn sm ${i.used?'on':''}" data-act="idea-used" data-id="${i.id}">${i.used?'Used':'Mark used'}</button><button type="button" class="x" data-act="idea-del" data-id="${i.id}" aria-label="Remove">×</button></div></div>`).join(''):'<p class="muted small">No ideas saved yet.</p>'}</div>`;
+}
+
+/* ---- goals ---- */
+function goalsCard(){
+  const g=B().goals,t=totals(),s=S();
+  let cap=0;s.days.forEach((d,i)=>{if(!d.on)return;let m=d.end-d.start;allBlocks().filter(b=>b.day===i).forEach(b=>{m-=Math.max(0,Math.min(b.end,d.end)-Math.max(b.start,d.start))});cap+=Math.max(0,m)});
+  const row=(label,val,target,fmtv)=>`<div class="goal"><div class="row" style="justify-content:space-between"><b>${label}</b><span class="num small">${fmtv(val)}${target?' of '+fmtv(target):''}</span></div><div class="meter ${target&&val<target?'part':''}"><i style="width:${target?pct(val,target):0}%"></i></div></div>`;
+  return `<div class="card" style="margin-bottom:16px"><h3>Goals for the week</h3><p class="help">Set what a good week looks like and the diary shows how close you are.</p>
+    <div class="grid2" style="margin-bottom:14px"><label class="f"><span>Teaching hours target</span><input type="number" min="0" step="1" data-biz="goal" data-k="hours" value="${g.hours??''}" placeholder="e.g. 30"></label><label class="f"><span>Takings target (£)</span><input type="number" min="0" step="10" data-biz="goal" data-k="income" value="${g.income??''}" placeholder="e.g. 1200"></label></div>
+    <div style="display:grid;gap:12px">${row('Hours booked',t.mins/60,+g.hours||0,v=>hrs(v*60)+' h')}${row('Takings booked',t.income,+g.income||0,v=>money(Math.round(v)))}${row('Diary filled',t.mins/60,cap/60,v=>hrs(v*60)+' h')}</div></div>`;
+}
+
+function renderBiz(){
+  const b=B();
+  $('biz-head').innerHTML=`<div class="hero"><div style="flex:1;min-width:min(100%,240px)"><div class="eyebrow">Business · week ${isoWeek(viewWeek)}${viewWeek===nowWeek()?'':' (not this week)'}</div><h2 class="t-date" style="font-size:clamp(24px,5vw,32px)">${{week:'This week’s jobs',dates:'Dates and tax',facebook:'Facebook',money:'Money and goals'}[bizView]}</h2></div><div class="seg" style="flex-wrap:wrap" role="group" aria-label="Business sections">${BIZ_VIEWS.map(([k,n])=>`<button type="button" data-act="biz-view" data-v="${k}" aria-pressed="${bizView===k}">${n}</button>`).join('')}</div></div>`;
+  const el=$('biz-body');
+  if(bizView==='money'){renderMoney();el.insertAdjacentHTML('afterbegin',goalsCard());return}
+  if(bizView==='week'){
+    const up=upcoming().filter(x=>x.n<=45).slice(0,5);
+    el.innerHTML=`<div class="bizgrid">${listCard('routine')}${listCard('vehicle')}<div style="display:grid;gap:14px">${listCard('posts')}<div class="card"><div class="chk-head"><h3>Coming up</h3><span class="spacer" style="flex:1"></span><button type="button" class="btn sm ghost" data-act="biz-view" data-v="dates">All dates</button></div>${up.length?up.map(dateRow).join(''):'<p class="help" style="margin:6px 0 0">Nothing due in the next six weeks. Add your MOT, insurance and badge dates under Dates and tax.</p>'}</div></div></div>`;
+    return;
+  }
+  if(bizView==='dates'){
+    const ds=b.dates.filter(d=>d.date).map(d=>Object.assign({},d,{n:daysUntil(d.date),sub:d.note||''})).sort((a,c)=>a.date.localeCompare(c.date));
+    const blank=b.dates.filter(d=>!d.date);const mt=mtdItems().map(x=>Object.assign(x,{n:daysUntil(x.date)})).slice(0,7);
+    el.innerHTML=`<div class="bizgrid"><div class="card"><div class="chk-head"><h3>Key dates and renewals</h3><span class="spacer" style="flex:1"></span><button type="button" class="btn sm primary" data-act="date-new">Add a date</button></div><p class="help">Anything with a deadline. “Done” moves a repeating date on to the next one. Dates within 30 days show on Today.</p>
+      ${ds.map(dateRow).join('')}${blank.length?`<div class="drow"><div class="main"><small>No date yet</small><div class="row" style="margin-top:6px">${blank.map(d=>`<button type="button" class="btn sm" data-act="date-edit" data-id="${d.id}">${esc(d.label)}</button>`).join('')}</div></div></div>`:''}</div>
+    <div class="card"><h3>Making Tax Digital and Self Assessment</h3><p class="help">Pupil Diary keeps the deadlines in front of you. The figures and the filing stay in your MTD software.</p>
+      <label class="f" style="margin-bottom:6px"><span>When do you join MTD for Income Tax?</span><select data-biz="mtd-from"><option value="0" ${!b.mtdFrom?'selected':''}>Not yet, or not sure</option><option value="2026" ${+b.mtdFrom===2026?'selected':''}>From April 2026 (qualifying income over £50,000)</option><option value="2027" ${+b.mtdFrom===2027?'selected':''}>From April 2027 (over £30,000)</option><option value="2028" ${+b.mtdFrom===2028?'selected':''}>From April 2028 (over £20,000)</option></select></label>
+      ${mt.map(dateRow).join('')}
+      <div class="fgroup" style="margin-top:8px"><div class="eyebrow">Before each quarterly update</div><ul class="lp-list" style="border:0;padding:0 0 0 18px;background:none"><li>All lesson income for the quarter is in your software</li><li>Fuel, insurance, franchise and car costs are entered, with receipts kept</li><li>Business mileage is up to date</li><li>Bank account reconciled</li><li>Send the update, then save the confirmation</li></ul></div>
+      <p class="help" style="margin:10px 0 0">Qualifying income is your turnover before expenses, from self-employment and property together. These are the standard HMRC dates; confirm your own start date in your HMRC account or with your accountant. <a href="https://www.gov.uk/guidance/use-making-tax-digital-for-income-tax" target="_blank" rel="noopener">HMRC guidance</a></p></div></div>`;
+    return;
+  }
+  el.innerHTML=`<div class="bizgrid"><div style="display:grid;gap:14px">${listCard('posts')}${ideasCard()}</div>${fbCard()}</div>`;
+}
+function jobsCard(){
+  const rows=[['routine','Weekly routine','week'],['vehicle','Vehicle check','week'],['posts','Facebook posts','facebook']].map(([k,n,v])=>{const [d,t]=listProg(k);return `<button type="button" data-act="biz-view" data-v="${v}"><span class="sev ${t&&d>=t?'ok':''}">${t&&d>=t?'✓':t-d}</span><span>${n} <span class="muted small">${d} of ${t} done</span></span><span class="go" aria-hidden="true">›</span></button>`}).join('');
+  return `<div class="sect"><h3>This week’s jobs</h3><div class="attn">${rows}</div></div>`;
+}
+
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act,id=t.dataset.id,k=t.dataset.k;const b=B();
+  const again=()=>{save();renderAll()};
+  switch(a){
+    case 'biz-view':bizView=t.dataset.v;bizEdit=null;try{localStorage.setItem(KEY+':biz',bizView)}catch(_){}if(tab!=='money')setTab('money');else{renderBiz();window.scrollTo(0,0)}break;
+    case 'biz-edit':bizEdit=bizEdit===k?null:k;renderBiz();break;
+    case 'biz-add':{const i=$('new-'+k);const v=i&&i.value.trim();if(v){b[k].push({id:'c'+uid(),text:v});save();renderBiz();const n=$('new-'+k);if(n)n.focus()}break}
+    case 'biz-del':b[k]=b[k].filter(i=>i.id!==id);delete week.checks[id];again();break;
+    case 'biz-up':{const ix=b[k].findIndex(i=>i.id===id);if(ix>0){const [x]=b[k].splice(ix,1);b[k].splice(ix-1,0,x);again()}break}
+    case 'biz-all':b[k].forEach(i=>week.checks[i.id]=true);again();break;
+    case 'date-new':dateSheet(null);break;
+    case 'date-edit':dateSheet(b.dates.find(d=>d.id===id));break;
+    case 'date-save':{const d=sheetCtx.kd;d.label=$('kd-label').value.trim();d.date=$('kd-date').value;d.every=+$('kd-every').value;d.note=$('kd-note').value.trim();
+      if(!d.label){const er=$('kd-err');er.hidden=false;er.textContent='Give it a name.';break}
+      if(sheetCtx.isNew)b.dates.push(d);else b.dates=b.dates.map(x=>x.id===d.id?d:x);closeSheet();again();break}
+    case 'date-del':pushUndo();b.dates=b.dates.filter(x=>x.id!==sheetCtx.kd.id);closeSheet();again();toast('Date removed');break;
+    case 'date-done':{pushUndo();
+      if(id.startsWith('mtd')){b.mtdDone[id]=todayISO();again();toast('Marked as done');break}
+      const d=b.dates.find(x=>x.id===id);if(!d)break;
+      if(+d.every>0){let nx=addMonths(d.date,+d.every);while(daysUntil(nx)<0)nx=addMonths(nx,+d.every);d.date=nx;again();toast(`${d.label} done. Next due ${niceDate(nx)} ${nx.slice(0,4)}.`)}
+      else{d.date='';again();toast(`${d.label} done`)}break}
+    case 'go-dates':bizView='dates';setTab('money');break;
+    case 'fb-type':fb.type=t.dataset.v;fb.out='';fb.msg='';renderBiz();break;
+    case 'fb-tone':fb.tone=t.dataset.v;renderBiz();break;
+    case 'fb-write':if(fb.type==='pass'&&!fb.pupil){toast('Choose who passed first');break}if(fb.type==='custom'&&!fb.extra.trim()){toast('Say what the post is about first');break}fbWrite();break;
+    case 'fb-copy':copyText(($('fb-out')||{}).value||fb.out);break;
+    case 'fb-save':{const v=(($('fb-out')||{}).value||fb.out).trim();if(v){b.ideas.unshift({id:'i'+uid(),text:v});again();toast('Saved to your ideas')}break}
+    case 'idea-add':{const i=$('new-idea');const v=i&&i.value.trim();if(v){b.ideas.unshift({id:'i'+uid(),text:v});again()}break}
+    case 'idea-copy':copyText((b.ideas.find(i=>i.id===id)||{}).text||'');break;
+    case 'idea-used':{const i=b.ideas.find(x=>x.id===id);if(i){if(i.used)delete i.used;else i.used=todayISO();again()}break}
+    case 'idea-del':pushUndo();b.ideas=b.ideas.filter(i=>i.id!==id);again();toast('Idea removed');break;
+  }
+});
+document.addEventListener('change',e=>{
+  const t=e.target,k=t.dataset&&t.dataset.biz,b=B();
+  if(t.dataset&&t.dataset.fb){fb[t.dataset.fb]=t.value;return}
+  if(!k)return;
+  if(k==='tick'){if(t.checked)week.checks[t.dataset.id]=true;else delete week.checks[t.dataset.id];save();renderAll()}
+  else if(k==='item'){const i=b[t.dataset.k].find(x=>x.id===t.dataset.id);if(i&&t.value.trim()){i.text=t.value.trim();save()}}
+  else if(k==='goal'){if(t.value===''||+t.value<=0)delete b.goals[t.dataset.k];else b.goals[t.dataset.k]=+t.value;save();renderBiz()}
+  else if(k==='mtd-from'){b.mtdFrom=+t.value||0;save();renderBiz()}
+});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.fb)fb[t.dataset.fb]=t.value});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;const k=e.target.dataset&&e.target.dataset.biz;
+  if(k==='new'){e.preventDefault();document.querySelector(`[data-act="biz-add"][data-k="${e.target.dataset.k}"]`).click()}
+  if(k==='new-idea'){e.preventDefault();document.querySelector('[data-act="idea-add"]').click()}
 });
 
 /* ---------- drag to move / resize (15 min steps) ---------- */
@@ -2440,7 +2686,7 @@ $('gear').innerHTML=ic('gear');
 setInterval(()=>{if((tab==='diary'||tab==='today')&&!sheet.open&&!window.__dragging&&!document.hidden)renderAll()},60000);
 selDay=todayIdx();
 tab=tabFromHash()||'today';
-if(tab==='today'&&viewWeek!==nowWeek()){viewWeek=nowWeek();week=normWeek(cache[viewWeek])}
+if((tab==='today'||tab==='money')&&viewWeek!==nowWeek()){viewWeek=nowWeek();week=normWeek(cache[viewWeek])}
 renderAll();
 initDb();
 </script>
