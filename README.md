@@ -9,3 +9,7 @@ A lesson planner for driving instructors. After a lesson, you dictate your notes
 Each plan can be copied into TotalDrive.
 
 The app is a single page, `lesson-planner/index.html`, published as a Claude artifact. It uses the artifact runtime for private storage (`db`, saved under the instructor's own account) and for Claude calls (`sample`, with images for screenshots), so there are no API keys or servers to look after.
+
+## Pupil Diary
+
+`pupil-diary/index.html` is the source of the Pupil Diary artifact: a Today run sheet, week diary with automatic planning, pupil profiles and availability, teaching progress, and takings. It is published as a Claude artifact and keeps its data in the artifact database (`planner/main` and `weeks/<monday>`).
