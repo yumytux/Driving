@@ -569,7 +569,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px soli
 .lp-mins{color:var(--brand-text)}.lp-n{color:var(--brand-text)}
 
 /* Money */
-.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px;margin-bottom:16px}
 @media (max-width:860px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 16px;display:grid;gap:2px;min-width:0;align-content:start}
 .tile .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
@@ -601,6 +601,13 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px soli
 .mtbl tr:last-child td{border-bottom:0}
 .mtbl td.r,.mtbl th.r{text-align:right;font-variant-numeric:tabular-nums}
 
+/* TotalDrive transfer */
+.tdbtn .cnt{background:var(--warn-bg);color:var(--warn);font-family:var(--f-mono);font-size:11.5px;font-weight:700;border-radius:6px;padding:1px 6px}
+.tdrow.ok{background:var(--raised);border-color:transparent}
+.tdrow.ok b,.tdrow.ok .num{color:var(--muted)}
+.tdrow.changed,.tdrow.rm{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.tdmode .pprog,.tdmode .lp-setlv label.f,.tdmode .lp-chipwrap,.tdmode .lp-bar,.tdmode .lp-key,.tdmode [data-lp="view"][data-v="overview"],.tdmode .lp-pupil .main>.muted{display:none}
+@media (max-width:480px){.tdrow{flex-wrap:wrap}.tdrow .ava{display:none}.tdrow>div{flex-basis:100%}}
 /* sheets */
 dialog#sheet{border-radius:20px;width:min(600px,calc(100vw - 24px))}
 dialog#sheet.wide{width:min(720px,calc(100vw - 24px))}
@@ -671,8 +678,8 @@ function defaultState(){
       pref:'compact',avoidConsecutive:true,allowSameDay:false,rate:40},
     areas:[],travel:{},pupils:[],recurring:[],progress:{}};
 }
-function emptyWeek(){return {lessons:[],blocks:[],skip:[]}}
-function normWeek(w){w=w||{};return {lessons:Array.isArray(w.lessons)?w.lessons:[],blocks:Array.isArray(w.blocks)?w.blocks:[],skip:Array.isArray(w.skip)?w.skip:[]}}
+function emptyWeek(){return {lessons:[],blocks:[],skip:[],tdGone:[]}}
+function normWeek(w){w=w||{};return {lessons:Array.isArray(w.lessons)?w.lessons:[],blocks:Array.isArray(w.blocks)?w.blocks:[],skip:Array.isArray(w.skip)?w.skip:[],tdGone:Array.isArray(w.tdGone)?w.tdGone:[]}}
 function isOff(p){return (p.status&&p.status!=='active')||week.skip.includes(p.id)}
 let pendingLegacy=null; // old single-week data waiting to move into its own week
 function normalize(s){
@@ -713,7 +720,7 @@ function persistLocal(){try{localStorage.setItem(KEY,JSON.stringify({main:state,
 function write(ref,data){
   chain=chain.then(()=>ref.set(data)).then(()=>setSync('Saved'),e=>setSync(e&&e.code==='quota_exceeded'?'Storage full – kept on this device':'Couldn’t sync – kept on this device'));
 }
-function save(){clearTimeout(saveTimer);setSync('Saving…');saveTimer=setTimeout(flush,600)}
+function save(){tdSweep();clearTimeout(saveTimer);setSync('Saving…');saveTimer=setTimeout(flush,600)}
 function flush(){
   clearTimeout(saveTimer);
   cache[viewWeek]=week;
@@ -723,7 +730,7 @@ function flush(){
   const mj=JSON.stringify(state);
   if(mj!==lastMain){lastMain=mj;write(mainRef,JSON.parse(mj));wrote=true}
   const wj=JSON.stringify(week);
-  const fresh=lastWeek[viewWeek]===undefined&&!week.lessons.length&&!week.blocks.length&&!week.skip.length;
+  const fresh=lastWeek[viewWeek]===undefined&&!week.lessons.length&&!week.blocks.length&&!week.skip.length&&!week.tdGone.length;
   if(wj!==lastWeek[viewWeek]&&!fresh){lastWeek[viewWeek]=wj;write(db.doc('weeks/'+viewWeek),JSON.parse(wj));wrote=true}
   if(!wrote)setSync('Saved');
 }
@@ -982,6 +989,48 @@ function testInfo(p){
 }
 function testPill(p){const t=testInfo(p);return t?`<span class="pill ${t.cls}" title="${esc(t.when)}">${t.txt}</span>`:''}
 function avaHtml(p,cls){return `<span class="ava ${cls||''}" style="--pc:${p?.color||'#5C6B8A'}" aria-hidden="true">${ini(p?.name)}</span>`}
+const TD=()=>S().td!==false; // payments and progress are kept in TotalDrive
+function tdSig(l){return [l.pupilId,l.day,l.start,l.dur,l.locKey||'A'].join('|')}
+function tdDesc(l){const p=pupil(l.pupilId);return `${p?.name||'Unknown pupil'} · ${DAYS[l.day]} ${shortDate(dateFor(l.day))}, ${fmt(l.start)}–${fmt(l.start+l.dur)}`}
+function tdState(l){if(gone(l))return l.td?'remove':'none';if(!l.td)return 'new';return l.td===tdSig(l)?'ok':'changed'}
+function tdPending(){return week.lessons.filter(l=>/new|changed|remove/.test(tdState(l))).length+(week.tdGone||[]).length}
+function tdMark(l){l.td=tdSig(l);l.tdTxt=tdDesc(l);l.locked=true}
+function tdLine(l){const p=pupil(l.pupilId);return `${p?.name||'Unknown pupil'}, ${DAYS_LONG[l.day]} ${shortDate(dateFor(l.day))}, ${fmt(l.start)}–${fmt(l.start+l.dur)} (${hrs(l.dur)} h), pick-up ${locLabel(p,l.locKey)}`}
+let tdSeen={wk:null,m:{}};
+function tdSweep(){
+  if(!Array.isArray(week.tdGone))week.tdGone=[];
+  if(tdSeen.wk===viewWeek){const ids=new Set(week.lessons.map(l=>l.id));for(const id in tdSeen.m)if(!ids.has(id)&&!week.tdGone.some(g=>g.id===id))week.tdGone.push({id,txt:tdSeen.m[id]})}
+  week.tdGone=week.tdGone.filter(g=>!week.lessons.some(l=>l.id===g.id));
+  tdSeen={wk:viewWeek,m:{}};week.lessons.forEach(l=>{if(l.td)tdSeen.m[l.id]=l.tdTxt||tdDesc(l)});
+}
+function tdSheet(){
+  const keep=sheet.open&&sheetCtx.td?sheet.scrollTop:0;
+  const ls=week.lessons.slice().sort((a,b)=>a.day-b.day||a.start-b.start);
+  const cnt={new:0,changed:0,remove:0,ok:0,none:0};ls.forEach(l=>cnt[tdState(l)]++);const goneN=(week.tdGone||[]).length;
+  const sum=[cnt.new&&`${cnt.new} to enter`,cnt.changed&&`${cnt.changed} to change`,(cnt.remove+goneN)&&`${cnt.remove+goneN} to remove`,`${cnt.ok} already in`].filter(Boolean).join(' · ');
+  let h=`<div class="sh"><h2>Send to TotalDrive</h2><button type="button" class="x" data-act="close" aria-label="Close">×</button></div><div class="sb">
+    <p class="muted small" style="margin:0">Week of ${shortDate(dateFor(0))}. Enter each lesson in TotalDrive, then tick it here. If you move or delete a lesson later, it comes back onto this list. <b style="color:var(--ink)">${sum}</b></p>`;
+  if(goneN||cnt.remove){
+    h+=`<div class="fgroup"><div class="eyebrow">Remove from TotalDrive</div>`;
+    h+=(week.tdGone||[]).map(g=>`<div class="slot tdrow rm"><div><b>${esc(g.txt)}</b><div class="muted small">Deleted from this diary after you entered it</div></div><button type="button" class="btn sm" data-act="td-gone" data-id="${g.id}">Removed</button></div>`).join('');
+    h+=ls.filter(l=>tdState(l)==='remove').map(l=>`<div class="slot tdrow rm"><div><b>${esc(l.tdTxt||tdDesc(l))}</b><div class="muted small">Cancelled here after you entered it</div></div><button type="button" class="btn sm" data-act="td-tick" data-id="${l.id}">Removed</button></div>`).join('');
+    h+='</div>';
+  }
+  let any=false;
+  for(let d=0;d<7;d++){
+    const day=ls.filter(l=>l.day===d&&!gone(l));if(!day.length)continue;any=true;
+    h+=`<div class="fgroup"><div class="eyebrow">${DAYS_LONG[d]} ${shortDate(dateFor(d))}</div>`+day.map(l=>{const p=pupil(l.pupilId),st=tdState(l);
+      return `<div class="slot tdrow ${st}" style="--pc:${p?.color||'#5C6B8A'}">${avaHtml(p)}<div><b>${esc(p?.name||'Unknown pupil')}</b> <span class="num">${fmt(l.start)}–${fmt(l.start+l.dur)}</span> <span class="muted small">${hrs(l.dur)} h</span><div class="muted small">${esc(locLabel(p,l.locKey))}${st==='changed'?` · <b style="color:var(--warn)">was ${esc((l.tdTxt||'').split(' · ').slice(1).join(' · ')||'different')}</b>`:''}</div></div><button type="button" class="btn sm ghost" data-act="td-copy" data-id="${l.id}">Copy</button><button type="button" class="btn sm ${st==='ok'?'on':st==='changed'?'':'primary'}" data-act="td-tick" data-id="${l.id}" aria-pressed="${st==='ok'}">${st==='ok'?'In TotalDrive ✓':st==='changed'?'Updated':'Entered'}</button></div>`}).join('')+'</div>';
+  }
+  if(!any&&!goneN&&!cnt.remove)h+=`<div class="empty">No lessons in the diary for this week yet.</div>`;
+  h+=`</div><div class="sf"><button type="button" class="btn" data-act="td-copy-all">Copy the list</button><span class="spacer"></span><button type="button" class="btn" data-act="close">Done</button>${cnt.new+cnt.changed+cnt.remove+goneN?`<button type="button" class="btn primary" data-act="td-all">Mark all as done</button>`:''}</div>`;
+  openSheet(h,{td:1},'wide');sheet.scrollTop=keep;
+}
+function tdListText(){
+  const ls=week.lessons.filter(l=>/new|changed/.test(tdState(l))).sort((a,b)=>a.day-b.day||a.start-b.start);
+  const rm=(week.tdGone||[]).map(g=>g.txt).concat(week.lessons.filter(l=>tdState(l)==='remove').map(l=>l.tdTxt||tdDesc(l)));
+  return 'For TotalDrive – week of '+shortDate(dateFor(0))+'\n'+(ls.length?ls.map(l=>(tdState(l)==='changed'?'CHANGE: ':'')+tdLine(l)).join('\n'):'Nothing new to enter.')+(rm.length?'\n\nRemove:\n'+rm.join('\n'):'');
+}
 function haveCount(p){return week.lessons.filter(l=>l.pupilId===p.id).length}
 
 /* ---------- undo + toast ---------- */
@@ -1034,6 +1083,7 @@ function setTab(t){
 function tabFromHash(){const h=(location.hash||'').slice(1);return Object.keys(HASH).find(k=>HASH[k]===h)||null}
 window.addEventListener('hashchange',()=>{const t=tabFromHash();if(t&&t!==tab)setTab(t)});
 function renderAll(){
+  document.body.classList.toggle('tdmode',TD());if(TD()&&lpView==='overview')lpView='sequence';
   renderNav();
   ['today','diary','pupils','lessons','money','settings'].forEach(t=>$('tab-'+t).hidden=t!==tab);
   ({today:renderToday,diary:renderDiary,pupils:renderPupils,lessons:renderLessons,money:renderMoney,settings:renderSettings})[tab]();
@@ -1073,11 +1123,11 @@ function rowsFor(d,w,wk){
     if(i>0){const prev=act[i-1],bad=m.conflicts.includes(i);h+=`<div class="lr-gap ${bad?'bad':''}">${travel(prev.loc,l.loc)} min drive · ${l.start-prev.start-prev.dur} min between${bad?' · too tight':''}</div>`}
     const tp=l.topic&&lpTopic(l.topic);const live=isToday&&!gone(l)&&nm>=l.start&&nm<l.start+l.dur;
     const sub=[locLabel(p,l.locKey),tp?tp.name:'',l.note||''].filter(Boolean).join(' · ');
-    const pills=(l.st==='cancelled'?'<span class="pill">Cancelled</span>':l.st==='noshow'?'<span class="pill bad">No-show</span>':live?'<span class="pill bad">Now</span>':'')+(owes(wk,l)?`<span class="pill warn">Owes ${money(feeOf(l))}</span>`:'');
+    const pills=(l.st==='cancelled'?'<span class="pill">Cancelled</span>':l.st==='noshow'?'<span class="pill bad">No-show</span>':live?'<span class="pill bad">Now</span>':'')+(!TD()&&owes(wk,l)?`<span class="pill warn">Owes ${money(feeOf(l))}</span>`:'')+(wk===viewWeek&&tdState(l)==='changed'?'<span class="pill warn">Changed since TotalDrive</span>':'');
     h+=`<div class="lrow ${l.st||''} ${live?'now':''}" data-act="edit-lesson" data-id="${l.id}" data-wk="${wk}">
       <div class="lr-time num">${fmt(l.start)}<small>${fmt(l.start+l.dur)}</small></div>${avaHtml(p)}
       <div class="lr-main"><b>${esc(p?.name||'Unknown pupil')}</b><span class="muted small">${esc(sub)}</span></div>
-      <div class="lr-end">${pills}${gone(l)?'':`<button type="button" class="tick pay" data-act="quick-paid" data-id="${l.id}" data-wk="${wk}" aria-pressed="${!!l.paid}" aria-label="${l.paid?'Paid':'Mark paid'}" title="${l.paid?'Paid':'Mark paid'}">£</button><button type="button" class="tick" data-act="quick-done" data-id="${l.id}" data-wk="${wk}" aria-pressed="${l.st==='done'}" aria-label="${l.st==='done'?'Done':'Mark done'}" title="${l.st==='done'?'Done':'Mark done'}">${ic('check')}</button>`}</div>
+      <div class="lr-end">${pills}${gone(l)?'':`${TD()?'':`<button type="button" class="tick pay" data-act="quick-paid" data-id="${l.id}" data-wk="${wk}" aria-pressed="${!!l.paid}" aria-label="${l.paid?'Paid':'Mark paid'}" title="${l.paid?'Paid':'Mark paid'}">£</button>`}<button type="button" class="tick" data-act="quick-done" data-id="${l.id}" data-wk="${wk}" aria-pressed="${l.st==='done'}" aria-label="${l.st==='done'?'Done':'Mark done'}" title="${l.st==='done'?'Done':'Mark done'}">${ic('check')}</button>`}</div>
     </div>`;
   }
   return h;
@@ -1089,7 +1139,8 @@ const peeked={};
 function attention(){
   const out=[];const t=totals();
   if(t.conflicts)out.push({s:'bad',n:t.conflicts,t:`lesson${t.conflicts>1?'s are':' is'} too tight after the one before`,act:'go-diary'});
-  const ow=owedItems();if(ow.length)out.push({s:'warn',n:'£',t:`${money(ow.reduce((a,x)=>a+x.fee,0))} unpaid across ${ow.length} lesson${ow.length>1?'s':''}`,act:'go-money'});
+  const tdn=tdPending();if(tdn)out.push({s:'warn',n:tdn,t:`change${tdn>1?'s':''} to send to TotalDrive`,act:'td-open'});
+  const ow=TD()?[]:owedItems();if(ow.length)out.push({s:'warn',n:'£',t:`${money(ow.reduce((a,x)=>a+x.fee,0))} unpaid across ${ow.length} lesson${ow.length>1?'s':''}`,act:'go-money'});
   state.pupils.filter(p=>p.status==='active').map(p=>({p,ti:testInfo(p)})).filter(x=>x.ti&&x.ti.n>=0&&x.ti.n<=28).sort((a,b)=>a.ti.n-b.ti.n)
     .forEach(({p,ti})=>out.push({s:ti.cls==='bad'?'bad':'warn',n:ti.n,t:`${p.name}: ${ti.txt.toLowerCase()} (${ti.when})`,act:'open-pupil',id:p.id}));
   const ub=underBooked();if(ub.length)out.push({s:'warn',n:ub.length,t:`pupil${ub.length>1?'s':''} still to fit in this week`,act:'go-diary'});
@@ -1111,7 +1162,7 @@ function renderToday(){
   if(next){
     const p=pupil(next.pupilId);const live=nm>=next.start;const mins=live?next.start+next.dur-nm:next.start-nm;
     const cd=mins>=60?`${Math.floor(mins/60)} h ${mins%60?mins%60+' min':''}`:`${mins} min`;
-    const tp=p&&((next.topic&&lpTopic(next.topic))||lpNext(p.id));const pr=p&&state.progress[p.id];const lv=p&&tp?lpLevel(p.id,tp.id):-1;const tst=testInfo(p);
+    const tp=p&&((next.topic&&lpTopic(next.topic))||(TD()?null:lpNext(p.id)));const pr=p&&state.progress[p.id];const lv=p&&tp?lpLevel(p.id,tp.id):-1;const tst=testInfo(p);
     h+=`<div class="nextup"><div class="nu-k">${live?'Driving now':'Next pick-up'} <em>${live?'ends in '+cd:'in '+cd}</em></div>
       <div class="nu-name">${esc(p?.name||'Unknown pupil')}</div>
       <div class="nu-meta"><span class="num">${fmt(next.start)}–${fmt(next.start+next.dur)}</span><span>${esc(locLabel(p,next.locKey))}</span>${p?.phone?`<span>${esc(p.phone)}</span>`:''}</div>
@@ -1155,6 +1206,7 @@ function renderDiary(){
   </div><div class="actions">
     <div class="seg" role="group" aria-label="Diary layout">${[['grid','Grid'],['list','List']].map(([k,n])=>`<button type="button" data-act="dview" data-v="${k}" aria-pressed="${diaryView===k}">${n}</button>`).join('')}</div>
     <button type="button" class="btn primary" id="genBtn" data-act="generate">Build my week</button>
+    <button type="button" class="btn tdbtn" data-act="td-open">Send to TotalDrive${tdPending()?`<span class="cnt">${tdPending()}</span>`:''}</button>
     <button type="button" class="btn" data-act="add-lesson">Add lesson</button>
     <button type="button" class="btn" data-act="add-block">Block time</button>
     <button type="button" class="btn icon" data-act="more" aria-label="More actions">${ic('more')}</button>
@@ -1166,7 +1218,7 @@ function renderDiary(){
   html+=`<div class="summary">
     <div class="stat"><div class="k">Lessons booked</div><div class="v">${t.booked}<small> of ${t.want}</small></div><div class="meter ${lp<100?'part':''}"><i style="width:${lp}%"></i></div></div>
     <div class="stat"><div class="k">Hours</div><div class="v">${hrs(t.mins)}<small> of ${hrs(t.wantMins)}</small></div><div class="meter ${hp<100?'part':''}"><i style="width:${hp}%"></i></div></div>
-    <div class="stat"><div class="k">Takings</div><div class="v">${money(Math.round(t.income))}</div><div class="s">${t.paid?money(t.paid)+' paid so far':'at '+money(+s.rate||0)+' an hour'}</div></div>
+    <div class="stat"><div class="k">Takings</div><div class="v">${money(Math.round(t.income))}</div><div class="s">${t.paid&&!TD()?money(t.paid)+' paid so far':'at '+money(+s.rate||0)+' an hour'}</div></div>
     <div class="stat"><div class="k">Driving between</div><div class="v">${hrs(t.tr)}<small> h</small></div></div>
     <div class="stat"><div class="k">Idle gaps</div><div class="v">${hrs(t.idle)}<small> h</small></div></div>
   </div>`;
@@ -1205,7 +1257,7 @@ function renderDiary(){
       const act=dayLessons(d),m=dayMetrics(act);
       week.lessons.filter(l=>l.day===d).sort((a,b)=>a.start-b.start).forEach(l=>{
         const p=pupil(l.pupilId);const c=p?.color||'#5C6B8A';const h=l.dur*PPM;const i=act.indexOf(l);
-        const marks=(l.st==='done'?'<i class="ok">✓</i>':l.st==='noshow'?'<i class="bad">NS</i>':'')+(l.paid?'<i class="ok">£</i>':owes(viewWeek,l)?'<i class="bad">£</i>':'');
+        const marks=(l.st==='done'?'<i class="ok">✓</i>':l.st==='noshow'?'<i class="bad">NS</i>':'')+(TD()?'':l.paid?'<i class="ok">£</i>':owes(viewWeek,l)?'<i class="bad">£</i>':'')+(tdState(l)==='ok'?'<i class="ok">TD</i>':tdState(l)==='changed'||tdState(l)==='remove'?'<i class="bad">TD</i>':'');
         html+=`<div class="lesson ${l.st||''} ${p?.example?'ex':''}" data-act="edit-lesson" data-id="${l.id}" style="--pc:${c};top:${(l.start-lo)*PPM}px;height:${h-2}px">
           ${l.locked&&!l.st?`<svg class="lock" viewBox="0 0 10 10" aria-label="Locked"><rect x="1.5" y="4.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M3 4.500V3a2 2 0 0 1 4 0v1.500" fill="none" stroke="currentColor" stroke-width="1.300"/></svg>`:''}
           <div class="n">${esc(p?.name||'Unknown pupil')}</div>
@@ -1322,7 +1374,7 @@ function pupilProfile(p){
   openSheet(`<div class="prof-top" style="--pc:${p.color}">${avaHtml(p,'lg')}<div style="min-width:0"><h2>${esc(p.name)}</h2><div class="row" style="margin-top:5px"><span class="pill ${p.status==='active'||p.status==='passed'?'ok':p.status==='waiting'?'warn':''}">${stLabel}</span>${testPill(p)}${p.theory?'<span class="pill info">Theory passed</span>':''}</div></div><button type="button" class="x" data-act="close" aria-label="Close">×</button></div>
   <div class="sb">
     <div class="row"><button type="button" class="btn sm primary" data-act="edit-pupil" data-id="${p.id}">Edit details</button>${acts}</div>
-    <div class="kv"><div><span>Lessons taken</span><b>${taken.length}</b></div><div><span>Hours driven</span><b>${hrs(taken.reduce((a,x)=>a+x.l.dur,0))}</b></div><div><span>Rate</span><b>${money(rateOf(p))}/h</b></div><div><span>Owes</span><b style="${owe?'color:var(--bad)':''}">${money(owe)}</b></div></div>
+    <div class="kv"><div><span>Lessons taken</span><b>${taken.length}</b></div><div><span>Hours driven</span><b>${hrs(taken.reduce((a,x)=>a+x.l.dur,0))}</b></div><div><span>Rate</span><b>${money(rateOf(p))}/h</b></div>${TD()?'':`<div><span>Owes</span><b style="${owe?'color:var(--bad)':''}">${money(owe)}</b></div>`}</div>
     <div class="fgroup"><div class="eyebrow">Contact and pick-ups</div>
       ${p.phone?`<div class="row"><b class="num" style="user-select:all">${esc(p.phone)}</b><button type="button" class="btn sm" data-act="copy-phone" data-id="${p.id}">Copy number</button></div>`:'<div class="muted small">No phone number saved.</div>'}
       <div class="small">${esc(locLabel(p,'A'))}${p.locB?.label||p.locB?.area?' &nbsp;|&nbsp; '+esc(locLabel(p,'B')):''} · ${p.perWeek} × ${hrs(p.hours*60)} h a week</div>
@@ -1330,14 +1382,14 @@ function pupilProfile(p){
       ${p.notes?`<div class="note">${esc(p.notes)}</div>`:''}
     </div>
     ${tst?`<div class="fgroup"><div class="eyebrow">Driving test</div><div>${esc(tst.when)}${p.test.centre?' · '+esc(p.test.centre):''} <span class="muted">(${tst.txt.toLowerCase()})</span></div></div>`:''}
-    <div class="fgroup"><div class="eyebrow">Progress</div>
+    <div class="fgroup" ${TD()?'hidden':''}><div class="eyebrow">Progress</div>
       <div class="lp-bar" aria-hidden="true" style="margin:0">${LP_ALL.map(t=>{const l=lpLevel(p.id,t.id);return `<i title="${esc(t.name)}" style="background:${l<0?'var(--line)':'var(--lv'+l+')'}"></i>`}).join('')}</div>
       <div class="small">${ps.done} of ${ps.total} topics Competent or better. ${nx?`Next up: <b>${nx.no}. ${esc(nx.name)}</b>`:'Ready for mock tests.'}</div>
       ${pr.goal?`<div class="small lp-goal">Next lesson goal: ${esc(pr.goal)}</div>`:''}
       <div class="row"><button type="button" class="btn sm" data-act="teach-pupil" data-id="${p.id}">Record progress</button>${nx?`<button type="button" class="btn sm" data-act="plan-lesson" data-id="${p.id}" data-tid="${nx.id}">Plan next lesson</button>`:''}</div>
     </div>
     <div class="fgroup"><div class="eyebrow">Lessons${allLoaded||!db?'':' (loading older weeks…)'}</div>
-      ${hist.length?`<div class="hist">${hist.slice(0,14).map(x=>{const tp=x.l.topic&&lpTopic(x.l.topic);const up=!isPast(x.wk,x.l)&&!x.l.st;return `<div><span><b>${niceDate(x.date)}</b> <span class="num">${fmt(x.l.start)}</span> · ${hrs(x.l.dur)} h<small>${esc([tp?tp.name:'',x.l.note||''].filter(Boolean).join(' · ')||(up?'Coming up':'No notes'))}</small></span><span class="pill ${x.l.st==='done'?'ok':x.l.st==='noshow'?'bad':up?'info':''}">${x.l.st==='done'?'Done':x.l.st==='noshow'?'No-show':x.l.st==='cancelled'?'Cancelled':up?'Booked':'Taken'}</span>${gone(x.l)?'<span></span>':`<button type="button" class="btn sm ${x.l.paid?'on':''}" data-act="hist-paid" data-wk="${x.wk}" data-id="${x.l.id}">${x.l.paid?'Paid':'Mark paid'}</button>`}</div>`}).join('')}</div>${hist.length>14?`<div class="muted small">Showing the latest 14 of ${hist.length}.</div>`:''}`:'<div class="muted small">No lessons booked yet.</div>'}
+      ${hist.length?`<div class="hist">${hist.slice(0,14).map(x=>{const tp=x.l.topic&&lpTopic(x.l.topic);const up=!isPast(x.wk,x.l)&&!x.l.st;return `<div><span><b>${niceDate(x.date)}</b> <span class="num">${fmt(x.l.start)}</span> · ${hrs(x.l.dur)} h<small>${esc([tp?tp.name:'',x.l.note||''].filter(Boolean).join(' · ')||(up?'Coming up':'No notes'))}</small></span><span class="pill ${x.l.st==='done'?'ok':x.l.st==='noshow'?'bad':up?'info':''}">${x.l.st==='done'?'Done':x.l.st==='noshow'?'No-show':x.l.st==='cancelled'?'Cancelled':up?'Booked':'Taken'}</span>${gone(x.l)||TD()?'<span></span>':`<button type="button" class="btn sm ${x.l.paid?'on':''}" data-act="hist-paid" data-wk="${x.wk}" data-id="${x.l.id}">${x.l.paid?'Paid':'Mark paid'}</button>`}</div>`}).join('')}</div>${hist.length>14?`<div class="muted small">Showing the latest 14 of ${hist.length}.</div>`:''}`:'<div class="muted small">No lessons booked yet.</div>'}
     </div>
   </div>`,{profile:p.id},'wide');
   if(!allLoaded)loadAllWeeks().then(()=>{if(allLoaded&&sheet.open&&sheetCtx.profile===p.id)pupilProfile(pupil(p.id))});
@@ -1431,21 +1483,21 @@ function renderMoney(){
   const map=Object.fromEntries(allWeeks());const nw=nowWeek();
   const wks=[];for(let i=7;i>=0;i--){const k=addDays(nw,-7*i);wks.push({k,s:weekSum(k,normWeek(map[k]))})}
   const cur=wks[7].s,nxt=weekSum(addDays(nw,7),normWeek(map[addDays(nw,7)]));
-  const ow=owedItems();const owTotal=ow.reduce((a,x)=>a+x.fee,0);
+  const td=TD();const ow=td?[]:owedItems();const owTotal=ow.reduce((a,x)=>a+x.fee,0);
   const prev4=wks.slice(3,7).reduce((a,x)=>a+x.s.fee,0)/4;
   const mx=Math.max(1,...wks.map(x=>x.s.fee));
-  let h=`<div class="hero"><div style="flex:1;min-width:min(100%,260px)"><div class="eyebrow">Money</div><h2 class="t-date" style="font-size:clamp(24px,5vw,32px)">Takings and what’s owed</h2></div><div class="actions"><button type="button" class="btn" data-act="csv">Download lessons (CSV)</button></div></div>`;
+  let h=`<div class="hero"><div style="flex:1;min-width:min(100%,260px)"><div class="eyebrow">Money</div><h2 class="t-date" style="font-size:clamp(24px,5vw,32px)">${td?'Takings from the diary':'Takings and what’s owed'}</h2></div><div class="actions"><button type="button" class="btn" data-act="csv">Download lessons (CSV)</button></div></div>`;
   h+=`<div class="tiles">
-    <div class="tile"><div class="k">This week</div><div class="v">${money(cur.fee)}</div><div class="s">${cur.n} lesson${cur.n===1?'':'s'} · ${hrs(cur.mins)} h · ${money(cur.paid)} paid</div></div>
-    <div class="tile ${owTotal?'owe':''}"><div class="k">Owed to you</div><div class="v">${money(owTotal)}</div><div class="s">${ow.length?`${ow.length} unpaid lesson${ow.length>1?'s':''} already taken`:'Nothing outstanding'}</div></div>
+    <div class="tile"><div class="k">This week</div><div class="v">${money(cur.fee)}</div><div class="s">${cur.n} lesson${cur.n===1?'':'s'} · ${hrs(cur.mins)} h${td?'':' · '+money(cur.paid)+' paid'}</div></div>
+    <div class="tile ${owTotal?'owe':''}" ${td?'hidden':''}><div class="k">Owed to you</div><div class="v">${money(owTotal)}</div><div class="s">${ow.length?`${ow.length} unpaid lesson${ow.length>1?'s':''} already taken`:'Nothing outstanding'}</div></div>
     <div class="tile"><div class="k">Next week booked</div><div class="v">${money(nxt.fee)}</div><div class="s">${nxt.n} lesson${nxt.n===1?'':'s'} · ${hrs(nxt.mins)} h</div></div>
     <div class="tile"><div class="k">Usual week</div><div class="v">${money(Math.round(prev4))}</div><div class="s">average of the last 4 weeks</div></div>
   </div>`;
   h+=`<div class="chartcard"><h3>Weekly takings<span>last 8 weeks, cancelled lessons left out</span></h3>
-    <div class="bars" role="img" aria-label="Weekly takings for the last 8 weeks">${wks.map((x,i)=>`<div class="bc ${i===7?'cur':''}" tabindex="0"><b>${x.s.fee?money(Math.round(x.s.fee)):''}</b><i style="height:${x.s.fee/mx*82}%"></i><span class="tip"><b>Week of ${shortDate(new Date(x.k+'T12:00:00'))}</b><br>${money(x.s.fee)} · ${x.s.n} lesson${x.s.n===1?'':'s'} · ${hrs(x.s.mins)} h<br>${money(x.s.paid)} paid${x.s.owe?' · '+money(x.s.owe)+' owed':''}</span></div>`).join('')}</div>
+    <div class="bars" role="img" aria-label="Weekly takings for the last 8 weeks">${wks.map((x,i)=>`<div class="bc ${i===7?'cur':''}" tabindex="0"><b>${x.s.fee?money(Math.round(x.s.fee)):''}</b><i style="height:${x.s.fee/mx*82}%"></i><span class="tip"><b>Week of ${shortDate(new Date(x.k+'T12:00:00'))}</b><br>${money(x.s.fee)} · ${x.s.n} lesson${x.s.n===1?'':'s'} · ${hrs(x.s.mins)} h${td?'':`<br>${money(x.s.paid)} paid${x.s.owe?' · '+money(x.s.owe)+' owed':''}`}</span></div>`).join('')}</div>
     <div class="barlabels">${wks.map((x,i)=>`<span class="${i===7?'cur':''}">${i===7?'This week':shortDate(new Date(x.k+'T12:00:00'))}</span>`).join('')}</div></div>`;
-  h+='<h2>Owed to you</h2>';
-  if(ow.length){
+  if(!td)h+='<h2>Owed to you</h2>';
+  if(td){}else if(ow.length){
     const by={};ow.forEach(x=>(by[x.p.id]=by[x.p.id]||[]).push(x));
     h+='<div class="lrows">'+Object.values(by).sort((a,b)=>b.reduce((s,x)=>s+x.fee,0)-a.reduce((s,x)=>s+x.fee,0)).map(xs=>{const p=xs[0].p;xs.sort((a,b)=>a.date.localeCompare(b.date));
       return `<div class="owerow">${avaHtml(p)}<div class="main"><b>${esc(p.name)}</b><div class="muted small">${xs.map(x=>`${niceDate(x.date)} (${hrs(x.l.dur)} h)`).join(', ')}</div></div><span class="amt">${money(xs.reduce((s,x)=>s+x.fee,0))}</span><div class="row"><button type="button" class="btn sm" data-act="copy-owed" data-id="${p.id}">Copy reminder</button><button type="button" class="btn sm primary" data-act="pay-all" data-id="${p.id}">Mark paid</button></div></div>`}).join('')+'</div>';
@@ -1453,9 +1505,9 @@ function renderMoney(){
   const rows={};week.lessons.forEach(l=>{if(gone(l))return;const r=rows[l.pupilId]=rows[l.pupilId]||{n:0,mins:0,fee:0,paid:0};r.n++;r.mins+=l.dur;const f=feeOf(l);r.fee+=f;if(l.paid)r.paid+=f});
   const ids=Object.keys(rows).filter(pupil).sort((a,b)=>pupil(a).name.localeCompare(pupil(b).name));
   h+=`<h2>${viewWeek===nw?'This week':'Week of '+shortDate(dateFor(0))} by pupil</h2>`;
-  if(ids.length)h+=`<div class="mtbl"><table><thead><tr><th>Pupil</th><th class="r">Lessons</th><th class="r">Hours</th><th class="r">Rate</th><th class="r">Fee</th><th class="r">Paid</th></tr></thead><tbody>${ids.map(id=>{const r=rows[id],p=pupil(id);return `<tr><td><b>${esc(p.name)}</b></td><td class="r num">${r.n}</td><td class="r num">${hrs(r.mins)}</td><td class="r num">${money(rateOf(p))}</td><td class="r num">${money(r.fee)}</td><td class="r">${r.paid>=r.fee?'<span class="pill ok">Paid</span>':r.paid?`<span class="pill warn">${money(r.paid)}</span>`:'<span class="pill">Not yet</span>'}</td></tr>`}).join('')}</tbody></table></div>`;
+  if(ids.length)h+=`<div class="mtbl"><table><thead><tr><th>Pupil</th><th class="r">Lessons</th><th class="r">Hours</th><th class="r">Rate</th><th class="r">Fee</th>${td?'':'<th class="r">Paid</th>'}</tr></thead><tbody>${ids.map(id=>{const r=rows[id],p=pupil(id);return `<tr><td><b>${esc(p.name)}</b></td><td class="r num">${r.n}</td><td class="r num">${hrs(r.mins)}</td><td class="r num">${money(rateOf(p))}</td><td class="r num">${money(r.fee)}</td>${td?'':`<td class="r">`}${td?'':r.paid>=r.fee?'<span class="pill ok">Paid</span>':r.paid?`<span class="pill warn">${money(r.paid)}</span>`:'<span class="pill">Not yet</span>'}${td?'':'</td>'}</tr>`}).join('')}</tbody></table></div>`;
   else h+=`<div class="empty">No lessons in the diary for this week yet.</div>`;
-  h+=`<p class="muted small" style="margin-top:12px;max-width:65ch">Fees use your hourly rate of ${money(+S().rate||0)}, or the pupil’s own rate if you set one on their details.</p>`;
+  h+=`<p class="muted small" style="margin-top:12px;max-width:65ch">Fees use your hourly rate of ${money(+S().rate||0)}, or the pupil’s own rate if you set one on their details.${td?' Payments are kept in TotalDrive, so this page only shows what the diary adds up to.':''}</p>`;
   el.innerHTML=h;
 }
 function csvText(){
@@ -1513,7 +1565,7 @@ function renderSettings(){
   html+=`<div class="card"><h3>Money and messages</h3><div class="grid2">
     <label class="f"><span>Hourly rate (£)</span><input type="number" min="0" step="1" data-set="rate" value="${s.rate}"></label>
     <label class="f"><span>Sign messages as</span><input type="text" data-set="signoff" value="${esc(s.signoff||'')}" placeholder="Your name"></label>
-  </div><p class="help" style="margin:10px 0 0">The sign-off is added to the reminder and timetable messages you copy for pupils. A pupil can have their own rate on their details.</p></div>`;
+  </div><label class="chk" style="margin-top:12px"><input type="checkbox" data-set="td" ${TD()?'checked':''}> I keep payments and progress in TotalDrive</label><p class="help" style="margin:6px 0 0">When ticked, Pupil Diary hides paid ticks, what’s owed and progress levels so nothing is entered twice. “Send to TotalDrive” on the diary lists what to copy across.</p><p class="help" style="margin:10px 0 0">The sign-off is added to the reminder and timetable messages you copy for pupils. A pupil can have their own rate on their details.</p></div>`;
   html+=`<div class="card"><h3>Backup</h3><p class="help">Your diary saves as you go. A backup file is a spare copy of every pupil, week and progress record that you keep yourself.</p><div class="row"><button type="button" class="btn" data-act="backup">Download backup</button><label class="btn" style="cursor:pointer">Restore from a backup<input type="file" id="restoreFile" accept=".json,application/json" hidden></label></div></div>`;
   html+=`<div class="card"><h3>Shortcuts</h3><p class="help" style="margin:0;line-height:2"><span class="kbd">1</span>–<span class="kbd">5</span> switch tab · <span class="kbd">←</span> <span class="kbd">→</span> change week in the diary · <span class="kbd">T</span> today · <span class="kbd">N</span> new lesson · <span class="kbd">B</span> build my week</p></div>`;
   el.innerHTML=html;
@@ -1556,12 +1608,13 @@ function lessonSheet(l,prefill){
     ${info}
     <div class="fgroup"><div class="eyebrow">How it went</div>
       <div class="stseg" role="group" aria-label="Lesson status">${[['','Booked'],['done','Done'],['noshow','No-show'],['cancelled','Cancelled']].map(([k,n])=>`<button type="button" data-act="l-st" data-v="${k}" aria-pressed="${(l.st||'')===k}">${n}</button>`).join('')}</div>
-      <label class="chk"><input type="checkbox" id="l-paid" ${l.paid?'checked':''}> Paid</label>
+      ${TD()?'':`<label class="chk"><input type="checkbox" id="l-paid" ${l.paid?'checked':''}> Paid</label>`}
+      <label class="chk"><input type="checkbox" id="l-td" ${tdState(l)==='ok'?'checked':''}> Entered in TotalDrive${tdState(l)==='changed'?' (changed since, tick again once updated)':''}</label>
     </div>
     <div class="fgroup"><div class="eyebrow">Teaching</div>
       <div class="grid2">
         <label class="f"><span>Topic</span><select id="l-topic">${topicOpts}</select></label>
-        <label class="f"><span>Level after this lesson</span><select id="l-level"><option value="">Don’t change</option>${LEVELS.map((x,i)=>`<option value="${i}">${x.k}</option>`).join('')}</select></label>
+        <label class="f" ${TD()?'hidden':''}><span>Level after this lesson</span><select id="l-level"><option value="">Don’t change</option>${LEVELS.map((x,i)=>`<option value="${i}">${x.k}</option>`).join('')}</select></label>
       </div>
       <label class="f"><span>Note</span><textarea id="l-note" rows="2" placeholder="What you covered, what to pick up next time">${esc(l.note||'')}</textarea></label>
     </div>
@@ -1686,7 +1739,8 @@ document.addEventListener('click',async e=>{
       const l=sheetCtx.lesson;const v=i=>$(i).value;
       l.pupilId=v('l-p');l.day=+v('l-day');l.start=toMin(v('l-start'))??l.start;l.dur=Math.max(15,Math.round((parseFloat(v('l-dur'))||1)*60));
       l.locKey=v('l-loc');const p=pupil(l.pupilId);l.loc=(l.locKey==='B'?p.locB:p.locA)?.area||null;
-      if($('l-paid').checked)l.paid=true;else delete l.paid;
+      if($('l-paid')){if($('l-paid').checked)l.paid=true;else delete l.paid}
+      const tdWas=tdState(sheetCtx.isNew?{...l,td:undefined}:(week.lessons.find(x=>x.id===l.id)||l))==='ok';
       if(v('l-topic'))l.topic=v('l-topic');else delete l.topic;
       const note=v('l-note').trim();if(note)l.note=note;else delete l.note;
       l.locked=$('l-lock').checked||!!l.st||!!l.paid;
@@ -1696,6 +1750,7 @@ document.addEventListener('click',async e=>{
       pushUndo();
       const lv=v('l-level');const tid=l.topic||(lpNext(p.id)||{}).id;
       if(lv!==''&&tid){const pr=lpProg(p.id);pr.t[tid]=+lv;pr.updated=todayISO();l.topic=tid}
+      if($('l-td').checked){if(!tdWas||l.td===tdSig(l))tdMark(l)}else{delete l.td;delete l.tdTxt}
       if(sheetCtx.isNew)week.lessons.push(l);else week.lessons=week.lessons.map(x=>x.id===l.id?l:x);
       selDay=l.day;save();closeSheet();renderAll();toast(sheetCtx.isNew?`Booked ${first(p)}, ${DAYS[l.day]} ${fmt(l.start)}`:'Lesson saved');break}
     case 'del-lesson':pushUndo();week.lessons=week.lessons.filter(x=>x.id!==sheetCtx.lesson.id);save();closeSheet();renderAll();toast('Lesson deleted');break;
@@ -1771,6 +1826,12 @@ document.addEventListener('click',async e=>{
     case 'find-slot':{const p=pupil(id);if(!p)break;if(tab==='today'||tab==='pupils'||tab==='diary')slotSheet(p);else{tab='diary';renderAll();slotSheet(p)}break}
     case 'book-slot':{const p=pupil(id);if(!p)break;pushUndo();const k=t.dataset.loc||'A';const l={id:'l'+uid(),pupilId:id,day:+t.dataset.day,start:+t.dataset.m,dur:Math.round(p.hours*60),locKey:k,loc:(k==='B'?p.locB:p.locA)?.area||null,locked:true};week.lessons.push(l);week.skip=week.skip.filter(x=>x!==id);selDay=l.day;save();closeSheet();renderAll();toast(`Booked ${first(p)}, ${DAYS[l.day]} ${fmt(l.start)}`);break}
     case 'more':moreSheet();break;
+    case 'td-open':if(tab!=='diary'&&tab!=='today'){tab='diary';renderAll()}tdSheet();break;
+    case 'td-copy':{const l=week.lessons.find(x=>x.id===id);if(l)copyText(tdLine(l));break}
+    case 'td-copy-all':copyText(tdListText());break;
+    case 'td-tick':{const l=week.lessons.find(x=>x.id===id);if(!l)break;const st=tdState(l);if(st==='ok'||st==='remove'){delete l.td;delete l.tdTxt}else tdMark(l);save();renderAll();tdSheet();break}
+    case 'td-gone':week.tdGone=(week.tdGone||[]).filter(g=>g.id!==id);save();renderAll();tdSheet();break;
+    case 'td-all':pushUndo();week.lessons.forEach(l=>{const st=tdState(l);if(st==='new'||st==='changed')tdMark(l);else if(st==='remove'){delete l.td;delete l.tdTxt}});week.tdGone=[];save();closeSheet();renderAll();toast('Everything marked as in TotalDrive');break;
     case 'messages':messagesSheet();break;
     case 'plan-lesson':{const tid=t.dataset.tid;lpPupil=id;try{localStorage.setItem(KEY+':lp-pupil',id)}catch(_){}lpForm.topic=tid;const lv=lpLevel(id,tid);lpForm.now=String(Math.max(0,lv));lpForm.target=String(Math.min(4,Math.max(0,lv)+1));const prev=LP_ALL.find(x=>x.no===lpTopic(tid).no-1);lpForm.recap=prev?prev.id:'';lpForm.date=todayISO();lpView='card';go('lessons');break}
     case 'teach-pupil':lpPupil=id;try{localStorage.setItem(KEY+':lp-pupil',id)}catch(_){}lpView='sequence';{const nx=lpNext(id);lpOpen=new Set(nx?[nx.id]:[])}go('lessons');break;
@@ -1825,6 +1886,7 @@ document.addEventListener('change',e=>{
   else s[k]=+t.value;
   save();
   if(k==='sameArea'||k==='crossDefault')renderSettings();
+  if(k==='td')renderAll();
 });
 document.addEventListener('submit',e=>e.preventDefault());
 document.addEventListener('input',e=>{if(e.target.id==='pupilSearch'){pupilQ=e.target.value;const pos=e.target.selectionStart;renderPupils();const n=$('pupilSearch');n.focus();try{n.setSelectionRange(pos,pos)}catch(_){}}});
@@ -2138,7 +2200,7 @@ function renderLessons(){
   if(lpView==='card')lpRenderCard();
 }
 function lpSequence(p){
-  let h=`<p class="muted small lp-intro">Teach every pupil in this order. Each topic matches a skill in your Total Drive progress planner. Tap a topic for the fundamentals.${p?' Set '+esc(p.name.split(' ')[0])+'’s level inside each topic.':' Choose a pupil above to record their progress.'}</p>
+  let h=`<p class="muted small lp-intro">Teach every pupil in this order. Each topic matches a skill in your Total Drive progress planner. Tap a topic for the fundamentals.${TD()?'':p?' Set '+esc(p.name.split(' ')[0])+'’s level inside each topic.':' Choose a pupil above to record their progress.'}</p>
   <div class="lp-key">${LEVELS.map((_,i)=>lpChip(i)).join('')}</div>
   <p class="muted small">Manoeuvres (stage 4) can be slotted in as short 20 to 30 minute blocks once a pupil is Guided on junctions.</p>`;
   for(const s of STAGES){
