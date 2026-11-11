@@ -601,6 +601,13 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px soli
 .mtbl tr:last-child td{border-bottom:0}
 .mtbl td.r,.mtbl th.r{text-align:right;font-variant-numeric:tabular-nums}
 
+/* driving tests */
+.pill.test{background:var(--tarmac);color:var(--route)}
+.lesson.test{background:var(--tarmac);box-shadow:inset 0 0 0 1px var(--tarmac-2),inset 3px 0 0 var(--route)}
+.lesson.test .n{color:var(--tarmac-ink)}
+.lesson.test .t,.lesson.test .l{color:var(--tarmac-muted)}
+.lesson.test .t{color:var(--route)}
+.lesson.test .lock{color:var(--tarmac-muted)}
 /* Business */
 .bizgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:14px;align-items:start}
 .bizgrid>*{min-width:0}
@@ -1016,7 +1023,7 @@ function tdDesc(l){const p=pupil(l.pupilId);return `${p?.name||'Unknown pupil'} 
 function tdState(l){if(gone(l))return l.td?'remove':'none';if(!l.td)return 'new';return l.td===tdSig(l)?'ok':'changed'}
 function tdPending(){return week.lessons.filter(l=>/new|changed|remove/.test(tdState(l))).length+(week.tdGone||[]).length}
 function tdMark(l){l.td=tdSig(l);l.tdTxt=tdDesc(l);l.locked=true}
-function tdLine(l){const p=pupil(l.pupilId);return `${p?.name||'Unknown pupil'}, ${DAYS_LONG[l.day]} ${shortDate(dateFor(l.day))}, ${fmt(l.start)}–${fmt(l.start+l.dur)} (${hrs(l.dur)} h), pick-up ${locLabel(p,l.locKey)}`}
+function tdLine(l){const p=pupil(l.pupilId);return `${l.kind==='test'?'TEST: ':''}${p?.name||'Unknown pupil'}, ${DAYS_LONG[l.day]} ${shortDate(dateFor(l.day))}, ${fmt(l.start)}–${fmt(l.start+l.dur)} (${hrs(l.dur)} h), pick-up ${locLabel(p,l.locKey)}`}
 let tdSeen={wk:null,m:{}};
 function tdSweep(){
   if(!Array.isArray(week.tdGone))week.tdGone=[];
@@ -1041,7 +1048,7 @@ function tdSheet(){
   for(let d=0;d<7;d++){
     const day=ls.filter(l=>l.day===d&&!gone(l));if(!day.length)continue;any=true;
     h+=`<div class="fgroup"><div class="eyebrow">${DAYS_LONG[d]} ${shortDate(dateFor(d))}</div>`+day.map(l=>{const p=pupil(l.pupilId),st=tdState(l);
-      return `<div class="slot tdrow ${st}" style="--pc:${p?.color||'#5C6B8A'}">${avaHtml(p)}<div><b>${esc(p?.name||'Unknown pupil')}</b> <span class="num">${fmt(l.start)}–${fmt(l.start+l.dur)}</span> <span class="muted small">${hrs(l.dur)} h</span><div class="muted small">${esc(locLabel(p,l.locKey))}${st==='changed'?` · <b style="color:var(--warn)">was ${esc((l.tdTxt||'').split(' · ').slice(1).join(' · ')||'different')}</b>`:''}</div></div><button type="button" class="btn sm ghost" data-act="td-copy" data-id="${l.id}">Copy</button><button type="button" class="btn sm ${st==='ok'?'on':st==='changed'?'':'primary'}" data-act="td-tick" data-id="${l.id}" aria-pressed="${st==='ok'}">${st==='ok'?'In TotalDrive ✓':st==='changed'?'Updated':'Entered'}</button></div>`}).join('')+'</div>';
+      return `<div class="slot tdrow ${st}" style="--pc:${p?.color||'#5C6B8A'}">${avaHtml(p)}<div><b>${esc(p?.name||'Unknown pupil')}</b> <span class="num">${fmt(l.start)}–${fmt(l.start+l.dur)}</span> <span class="muted small">${hrs(l.dur)} h</span>${l.kind==='test'?' <span class="pill test">Test</span>':''}<div class="muted small">${esc(locLabel(p,l.locKey))}${st==='changed'?` · <b style="color:var(--warn)">was ${esc((l.tdTxt||'').split(' · ').slice(1).join(' · ')||'different')}</b>`:''}</div></div><button type="button" class="btn sm ghost" data-act="td-copy" data-id="${l.id}">Copy</button><button type="button" class="btn sm ${st==='ok'?'on':st==='changed'?'':'primary'}" data-act="td-tick" data-id="${l.id}" aria-pressed="${st==='ok'}">${st==='ok'?'In TotalDrive ✓':st==='changed'?'Updated':'Entered'}</button></div>`}).join('')+'</div>';
   }
   if(!any&&!goneN&&!cnt.remove)h+=`<div class="empty">No lessons in the diary for this week yet.</div>`;
   h+=`</div><div class="sf"><button type="button" class="btn" data-act="td-copy-all">Copy the list</button><span class="spacer"></span><button type="button" class="btn" data-act="close">Done</button>${cnt.new+cnt.changed+cnt.remove+goneN?`<button type="button" class="btn primary" data-act="td-all">Mark all as done</button>`:''}</div>`;
@@ -1144,7 +1151,7 @@ function rowsFor(d,w,wk){
     if(i>0){const prev=act[i-1],bad=m.conflicts.includes(i);h+=`<div class="lr-gap ${bad?'bad':''}">${travel(prev.loc,l.loc)} min drive · ${l.start-prev.start-prev.dur} min between${bad?' · too tight':''}</div>`}
     const tp=l.topic&&lpTopic(l.topic);const live=isToday&&!gone(l)&&nm>=l.start&&nm<l.start+l.dur;
     const sub=[locLabel(p,l.locKey),tp?tp.name:'',l.note||''].filter(Boolean).join(' · ');
-    const pills=(l.st==='cancelled'?'<span class="pill">Cancelled</span>':l.st==='noshow'?'<span class="pill bad">No-show</span>':live?'<span class="pill bad">Now</span>':'')+(!TD()&&owes(wk,l)?`<span class="pill warn">Owes ${money(feeOf(l))}</span>`:'')+(wk===viewWeek&&tdState(l)==='changed'?'<span class="pill warn">Changed since TotalDrive</span>':'');
+    const pills=(l.kind==='test'?'<span class="pill test">Test</span>':'')+(l.st==='cancelled'?'<span class="pill">Cancelled</span>':l.st==='noshow'?'<span class="pill bad">No-show</span>':live?'<span class="pill bad">Now</span>':'')+(!TD()&&owes(wk,l)?`<span class="pill warn">Owes ${money(feeOf(l))}</span>`:'')+(wk===viewWeek&&tdState(l)==='changed'?'<span class="pill warn">Changed since TotalDrive</span>':'');
     h+=`<div class="lrow ${l.st||''} ${live?'now':''}" data-act="edit-lesson" data-id="${l.id}" data-wk="${wk}">
       <div class="lr-time num">${fmt(l.start)}<small>${fmt(l.start+l.dur)}</small></div>${avaHtml(p)}
       <div class="lr-main"><b>${esc(p?.name||'Unknown pupil')}</b><span class="muted small">${esc(sub)}</span></div>
@@ -1185,7 +1192,7 @@ function renderToday(){
     const p=pupil(next.pupilId);const live=nm>=next.start;const mins=live?next.start+next.dur-nm:next.start-nm;
     const cd=mins>=60?`${Math.floor(mins/60)} h ${mins%60?mins%60+' min':''}`:`${mins} min`;
     const tp=p&&((next.topic&&lpTopic(next.topic))||(TD()?null:lpNext(p.id)));const pr=p&&state.progress[p.id];const lv=p&&tp?lpLevel(p.id,tp.id):-1;const tst=testInfo(p);
-    h+=`<div class="nextup"><div class="nu-k">${live?'Driving now':'Next pick-up'} <em>${live?'ends in '+cd:'in '+cd}</em></div>
+    h+=`<div class="nextup"><div class="nu-k">${next.kind==='test'?'Driving test':live?'Driving now':'Next pick-up'} <em>${live?'ends in '+cd:'in '+cd}</em></div>
       <div class="nu-name">${esc(p?.name||'Unknown pupil')}</div>
       <div class="nu-meta"><span class="num">${fmt(next.start)}–${fmt(next.start+next.dur)}</span><span>${esc(locLabel(p,next.locKey))}</span>${p?.phone?`<span>${esc(p.phone)}</span>`:''}</div>
       ${tp||pr?.goal||next.note||tst?`<div class="nu-plan">${tp?`<span>${next.topic?'Topic':'Next in their sequence'}: <b>${tp.no}. ${esc(tp.name)}</b> · ${lv<0?'not started':LEVELS[lv].k}</span>`:''}${pr?.goal?`<span>Goal: <b>${esc(pr.goal)}</b></span>`:''}${next.note?`<span>Note: ${esc(next.note)}</span>`:''}${tst&&tst.n>=0?`<span>${tst.txt} · ${esc(tst.when)}</span>`:''}</div>`:''}
@@ -1281,10 +1288,10 @@ function renderDiary(){
       week.lessons.filter(l=>l.day===d).sort((a,b)=>a.start-b.start).forEach(l=>{
         const p=pupil(l.pupilId);const c=p?.color||'#5C6B8A';const h=l.dur*PPM;const i=act.indexOf(l);
         const marks=(l.st==='done'?'<i class="ok">✓</i>':l.st==='noshow'?'<i class="bad">NS</i>':'')+(TD()?'':l.paid?'<i class="ok">£</i>':owes(viewWeek,l)?'<i class="bad">£</i>':'')+(tdState(l)==='ok'?'<i class="ok">TD</i>':tdState(l)==='changed'||tdState(l)==='remove'?'<i class="bad">TD</i>':'');
-        html+=`<div class="lesson ${l.st||''} ${p?.example?'ex':''}" data-act="edit-lesson" data-id="${l.id}" style="--pc:${c};top:${(l.start-lo)*PPM}px;height:${h-2}px">
+        html+=`<div class="lesson ${l.st||''} ${l.kind==='test'?'test':''} ${p?.example?'ex':''}" data-act="edit-lesson" data-id="${l.id}" style="--pc:${c};top:${(l.start-lo)*PPM}px;height:${h-2}px">
           ${l.locked&&!l.st?`<svg class="lock" viewBox="0 0 10 10" aria-label="Locked"><rect x="1.5" y="4.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M3 4.500V3a2 2 0 0 1 4 0v1.500" fill="none" stroke="currentColor" stroke-width="1.300"/></svg>`:''}
           <div class="n">${esc(p?.name||'Unknown pupil')}</div>
-          <div class="t">${fmt(l.start)}–${fmt(l.start+l.dur)}</div>
+          <div class="t">${l.kind==='test'?'TEST · ':''}${fmt(l.start)}–${fmt(l.start+l.dur)}</div>
           ${h>52?`<div class="l">${esc(locLabel(p,l.locKey))}</div>`:''}
           ${marks?`<span class="marks">${marks}</span>`:''}
           <div class="rz" title="Drag to change length" aria-hidden="true"></div>
@@ -1641,6 +1648,7 @@ function lessonSheet(l,prefill){
       </div>
       <label class="f"><span>Note</span><textarea id="l-note" rows="2" placeholder="What you covered, what to pick up next time">${esc(l.note||'')}</textarea></label>
     </div>
+    <label class="chk"><input type="checkbox" id="l-test" ${l.kind==='test'?'checked':''}> This is their driving test (pick-up, warm-up and test)</label>
     <label class="chk"><input type="checkbox" id="l-lock" ${l.locked?'checked':''}> Lock this lesson (Build my week won’t move it)</label>
     <p class="note bad" id="l-warn" hidden></p>
   </div>
@@ -1695,7 +1703,7 @@ function weekText(){
     const list=dayLessons(d);const blocks=allBlocks().filter(b=>b.day===d);
     if(!list.length&&!blocks.length)continue;
     out+=`\n${DAYS_LONG[d]} ${shortDate(dateFor(d))}\n`;
-    const items=[...list.map(l=>({t:l.start,s:`${fmt(l.start)}–${fmt(l.start+l.dur)}  ${pupil(l.pupilId)?.name||'?'} (${locLabel(pupil(l.pupilId),l.locKey)})`})),...blocks.map(b=>({t:b.start,s:b.start<=0&&b.end>=1440?`Day off${b.label?' – '+b.label:''}`:`${fmt(b.start)}–${fmt(b.end)}  ${b.label||'Blocked'}`}))].sort((a,b)=>a.t-b.t);
+    const items=[...list.map(l=>({t:l.start,s:`${fmt(l.start)}–${fmt(l.start+l.dur)}  ${l.kind==='test'?'TEST ':''}${pupil(l.pupilId)?.name||'?'} (${locLabel(pupil(l.pupilId),l.locKey)})`})),...blocks.map(b=>({t:b.start,s:b.start<=0&&b.end>=1440?`Day off${b.label?' – '+b.label:''}`:`${fmt(b.start)}–${fmt(b.end)}  ${b.label||'Blocked'}`}))].sort((a,b)=>a.t-b.t);
     out+=items.map(i=>i.s).join('\n')+'\n';
   }
   return out;
@@ -1709,6 +1717,7 @@ function pupilText(p){
 function reminderText(l){
   const p=pupil(l.pupilId);if(!p)return'';const iso=isoOf(viewWeek,l.day);const n=daysUntil(iso);
   const when=n===0?'today':n===1?'tomorrow':'on '+niceDate(iso,true);
+  if(l.kind==='test')return `Hi ${first(p)}, it’s test day ${when}! I’ll pick you up at ${fmt(l.start)} from ${placeOf(p,l)} for a warm-up drive first. Bring your provisional licence. You’ve got this.`+sign();
   return `Hi ${first(p)}, a reminder of your driving lesson ${when} at ${fmt(l.start)} (${hrs(l.dur)} h). I’ll pick you up at ${placeOf(p,l)}. See you then!`+sign();
 }
 function owedText(p){
@@ -1766,7 +1775,8 @@ document.addEventListener('click',async e=>{
       const tdWas=tdState(sheetCtx.isNew?{...l,td:undefined}:(week.lessons.find(x=>x.id===l.id)||l))==='ok';
       if(v('l-topic'))l.topic=v('l-topic');else delete l.topic;
       const note=v('l-note').trim();if(note)l.note=note;else delete l.note;
-      l.locked=$('l-lock').checked||!!l.st||!!l.paid;
+      if($('l-test').checked){l.kind='test';const iso=isoOf(viewWeek,l.day);if(!p.test||!p.test.date||daysUntil(p.test.date)<0)p.test={date:iso,time:'',centre:(p.test&&p.test.centre)||''}}else delete l.kind;
+      l.locked=$('l-lock').checked||!!l.st||!!l.paid||l.kind==='test';
       const clash=gone(l)?null:week.lessons.find(x=>x.id!==l.id&&x.day===l.day&&!gone(x)&&l.start<x.start+x.dur&&l.start+l.dur>x.start);
       const w=$('l-warn');
       if(clash&&!sheetCtx.warned){w.hidden=false;w.textContent=`This overlaps ${pupil(clash.pupilId)?.name||'another lesson'} (${fmt(clash.start)}–${fmt(clash.start+clash.dur)}). Press save again to keep it anyway.`;sheetCtx.warned=true;break}
